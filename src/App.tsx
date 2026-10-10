@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { db, exportBackup, importBackup } from './db';
 import { activeSeconds, isPaused, localDayBounds } from './timer';
+import { parseOptionalNumber, resolveProgress } from './progress';
 import type { ActiveTimer, Book, BookSource, BookStatus, Quote, Session } from './types';
 import { sourceLabels, statusLabels } from './types';
 import alignData from '../public/art/cat/align.json';
@@ -115,7 +116,7 @@ function App() {
   const view = selectedBook && tab === 'library'
     ? <BookDetail book={selectedBook} sessions={sessions} quotes={quotes} onBack={() => setSelectedBookId(undefined)} onRefresh={refresh} onStart={() => void startReading(selectedBook)} onModal={setModal} />
     : tab === 'home'
-      ? <Home books={books} sessions={sessions} timer={timer} currentBook={currentBook} elapsedSec={elapsedSec} paused={timerPaused} themeId={themeId} onStart={startReading} onPause={togglePause} onFinish={() => setModal('finish')} onQuote={() => setModal('quote')} onOpenBook={openBook} />
+      ? <Home books={books} sessions={sessions} timer={timer} currentBook={currentBook} elapsedSec={elapsedSec} paused={timerPaused} themeId={themeId} onStart={startReading} onPause={togglePause} onFinish={() => setModal('finish')} onQuote={() => setModal('quote')} onOpenBook={openBook} onAddBook={() => { setTab('library'); setModal('add-book'); }} />
       : tab === 'library'
         ? <Library books={books} onOpenBook={openBook} onAdd={() => setModal('add-book')} />
         : tab === 'calendar'
@@ -150,7 +151,7 @@ function App() {
 
 function Home(props: {
   books: Book[]; sessions: Session[]; timer?: ActiveTimer; currentBook?: Book; elapsedSec: number; paused: boolean; themeId: string;
-  onStart: (book: Book) => Promise<void>; onPause: () => Promise<void>; onFinish: () => void; onQuote: () => void; onOpenBook: (book: Book) => void;
+  onStart: (book: Book) => Promise<void>; onPause: () => Promise<void>; onFinish: () => void; onQuote: () => void; onOpenBook: (book: Book) => void; onAddBook: () => void;
 }) {
   const readingBooks = props.books.filter((book) => book.status === 'reading').sort((a, b) => b.updatedAt - a.updatedAt);
   const doneBooks = props.books.filter((book) => book.status === 'done').sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0));
@@ -172,8 +173,8 @@ function Home(props: {
             alt={pose === 'reading' ? '책 읽는 고양이' : pose === 'resting' ? '쉬는 고양이' : pose === 'sleeping' ? '자는 고양이' : '기다리는 고양이'}
             style={{ left: `${sprite.x}%`, top: `${sprite.y}%`, height: `${sprite.h}%`, transform: `translate(-50%, -100%)${sprite.flip ? ' scaleX(-1)' : ''}` }}
           />
-          <p className="paper-note">{note}</p>
         </div>
+        <p className="paper-note">{note}</p>
       </div>
       <div className="timer-overlap">
         {props.timer && props.currentBook ? <>
@@ -192,7 +193,7 @@ function Home(props: {
         </> : <>
           <div className="empty-timer"><strong>무슨 책을 펼쳐 볼까요?</strong><span>읽고 있는 책에서 바로 시작할 수 있어요.</span></div>
           <div className="reading-shortlist">
-            {readingBooks.length ? readingBooks.slice(0, 3).map((book) => <button key={book.id} onClick={() => void props.onStart(book)}><Cover book={book} small /><span>{book.title}</span><b>읽기 시작</b></button>) : <button onClick={() => document.querySelector<HTMLButtonElement>('[data-tab="library"]')?.click()} disabled>서재에서 책을 추가해 주세요</button>}
+            {readingBooks.length ? readingBooks.slice(0, 3).map((book) => <button key={book.id} onClick={() => void props.onStart(book)}><Cover book={book} small /><span>{book.title}</span><b>읽기 시작</b></button>) : <button onClick={props.onAddBook}>서재에서 책을 추가해 주세요</button>}
           </div>
         </>}
       </div>
@@ -285,14 +286,14 @@ function TimelineEditDialog({ entry, onClose, onSaved }: { entry: { kind: 'sessi
       await db.sessions.update(entry.item.id, {
         activeSec: minutes * 60,
         endedAt: entry.item.startedAt + minutes * 60_000,
-        pageFrom: Number(data.get('pageFrom')) || undefined,
-        pageTo: Number(data.get('pageTo')) || undefined,
+        pageFrom: parseOptionalNumber(data.get('pageFrom')),
+        pageTo: parseOptionalNumber(data.get('pageTo')),
         note: String(data.get('note')).trim() || undefined
       });
     } else {
       await db.quotes.update(entry.item.id, {
         text: String(data.get('text')).trim(),
-        page: Number(data.get('page')) || undefined,
+        page: parseOptionalNumber(data.get('page')),
         memo: String(data.get('memo')).trim() || undefined
       });
     }
@@ -356,8 +357,14 @@ function Settings({ themeId, setThemeId, onImported, setNotice }: { themeId: str
     const blob = await exportBackup();
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
-    anchor.href = url; anchor.download = `nyang-seojae-${new Date().toISOString().slice(0, 10)}.json`; anchor.click();
-    URL.revokeObjectURL(url); setNotice('백업 파일을 저장했습니다.');
+    anchor.href = url;
+    anchor.download = `nyang-seojae-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.append(anchor);
+    // DEVICE-CHECK: BOOX 기본 브라우저에서 JSON 파일이 다운로드 폴더에 저장되는지
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    setNotice('백업 파일을 저장했습니다.');
   }
   async function restore(file?: File) {
     if (!file) return;
@@ -379,8 +386,8 @@ function BookForm({ book, onClose, onSaved }: { book?: Book; onClose: () => void
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const timestamp = Date.now();
-    const totalPages = Number(data.get('totalPages')) || undefined;
-    const currentPage = Number(data.get('currentPage')) || 0;
+    const totalPages = parseOptionalNumber(data.get('totalPages'));
+    const currentPage = parseOptionalNumber(data.get('currentPage'));
     let coverBlobId = book?.coverBlobId;
     if (cover) { coverBlobId = uid(); await db.blobs.put({ id: coverBlobId, blob: cover, kind: 'cover' }); }
     const status = String(data.get('status')) as BookStatus;
@@ -388,7 +395,7 @@ function BookForm({ book, onClose, onSaved }: { book?: Book; onClose: () => void
       ...book,
       id: book?.id ?? uid(), title: String(data.get('title')).trim(), author: String(data.get('author')).trim() || undefined,
       source: String(data.get('source')) as BookSource, status, category: String(data.get('category')).trim() || undefined,
-      totalPages, currentPage, progress: status === 'done' ? 1 : totalPages ? Math.min(1, currentPage / totalPages) : book?.progress,
+      totalPages, currentPage, progress: resolveProgress({ progressInput: '', pageTo: currentPage, totalPages, previousProgress: book?.progress, done: status === 'done' }),
       rating: Number(data.get('rating')) || undefined, review: String(data.get('review')).trim() || undefined,
       isLifeBook: data.get('isLifeBook') === 'on', coverBlobId, createdAt: book?.createdAt ?? timestamp, updatedAt: timestamp,
       finishedAt: status === 'done' ? (book?.finishedAt ?? timestamp) : undefined
@@ -409,25 +416,26 @@ function BookForm({ book, onClose, onSaved }: { book?: Book; onClose: () => void
 function FinishForm({ timer, book, onClose, onSaved, onDiscard }: { timer: ActiveTimer; book: Book; onClose: () => void; onSaved: () => Promise<void>; onDiscard: () => Promise<void> }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget); const endedAt = Date.now();
-    const pageTo = Number(data.get('pageTo')) || undefined; const totalPages = book.totalPages; const progress = Number(data.get('progress')) || (pageTo && totalPages ? Math.round(pageTo / totalPages * 100) : undefined);
+    const pageTo = parseOptionalNumber(data.get('pageTo')); const totalPages = book.totalPages;
     const done = data.get('done') === 'on';
+    const progress = resolveProgress({ progressInput: String(data.get('progress') ?? ''), pageTo, totalPages, previousProgress: book.progress, done });
     await db.transaction('rw', db.sessions, db.books, db.activeTimers, async () => {
-      await db.sessions.put({ id: uid(), bookId: book.id, startedAt: timer.startedAt, endedAt, activeSec: activeSeconds(timer, endedAt), pauses: timer.pauses.map((p) => p.until ? p : { ...p, until: endedAt }), mode: 'timer', pageFrom: book.currentPage, pageTo, progressFrom: book.progress, progressTo: progress === undefined ? undefined : progress / 100, note: String(data.get('note')).trim() || undefined });
-      await db.books.update(book.id, { currentPage: pageTo ?? book.currentPage, progress: done ? 1 : progress === undefined ? book.progress : Math.min(1, progress / 100), status: done ? 'done' : 'reading', finishedAt: done ? endedAt : book.finishedAt, updatedAt: endedAt });
+      await db.sessions.put({ id: uid(), bookId: book.id, startedAt: timer.startedAt, endedAt, activeSec: activeSeconds(timer, endedAt), pauses: timer.pauses.map((p) => p.until ? p : { ...p, until: endedAt }), mode: 'timer', pageFrom: book.currentPage, pageTo, progressFrom: book.progress, progressTo: progress, note: String(data.get('note')).trim() || undefined });
+      await db.books.update(book.id, { currentPage: pageTo ?? book.currentPage, progress, status: done ? 'done' : 'reading', finishedAt: done ? endedAt : book.finishedAt, updatedAt: endedAt });
       await db.activeTimers.delete('current');
     });
     await onSaved(); onClose();
   }
-  return <Dialog title="독서 종료" onClose={onClose}><form onSubmit={submit} className="form-grid"><p className="wide form-intro"><strong>{book.title}</strong><br />이번 독서 {Math.max(1, Math.round(activeSeconds(timer) / 60))}분을 기록할까요?</p><label>읽은 쪽<input name="pageTo" type="number" min="0" defaultValue={book.currentPage} /></label><label>진행률 %<input name="progress" type="number" min="0" max="100" defaultValue={Math.round(progressOf(book) * 100)} /></label><label className="wide">메모<textarea name="note" rows={3} /></label><label className="check wide"><input name="done" type="checkbox" /> 이 책을 다 읽었어요</label><div className="form-actions wide spread"><button className="danger" type="button" onClick={() => void onDiscard()}>기록 없이 버리기</button><span><button type="button" onClick={onClose}>계속 읽기</button><button className="primary" type="submit">기록 저장</button></span></div></form></Dialog>;
+  return <Dialog title="독서 종료" onClose={onClose}><form onSubmit={submit} className="form-grid"><p className="wide form-intro"><strong>{book.title}</strong><br />이번 독서 {Math.max(1, Math.round(activeSeconds(timer) / 60))}분을 기록할까요?</p><label>읽은 쪽<input name="pageTo" type="number" min="0" defaultValue={book.currentPage} /></label><label>진행률 %<input name="progress" type="number" min="0" max="100" placeholder={`현재 ${Math.round(progressOf(book) * 100)}%`} /></label><label className="wide">메모<textarea name="note" rows={3} /></label><label className="check wide"><input name="done" type="checkbox" /> 이 책을 다 읽었어요</label><div className="form-actions wide spread"><button className="danger" type="button" onClick={() => void onDiscard()}>기록 없이 버리기</button><span><button type="button" onClick={onClose}>계속 읽기</button><button className="primary" type="submit">기록 저장</button></span></div></form></Dialog>;
 }
 
 function ManualSessionForm({ book, onClose, onSaved }: { book: Book; onClose: () => void; onSaved: () => Promise<void> }) {
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); const date = new Date(String(data.get('date'))); const minutes = Math.max(1, Number(data.get('minutes')) || 1); const startedAt = date.getTime(); await db.sessions.put({ id: uid(), bookId: book.id, startedAt, endedAt: startedAt + minutes * 60_000, activeSec: minutes * 60, pauses: [], mode: 'manual', pageFrom: Number(data.get('pageFrom')) || undefined, pageTo: Number(data.get('pageTo')) || undefined, note: String(data.get('note')).trim() || undefined }); await db.books.update(book.id, { updatedAt: Date.now() }); await onSaved(); onClose(); }
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); const date = new Date(String(data.get('date'))); const minutes = Math.max(1, Number(data.get('minutes')) || 1); const startedAt = date.getTime(); await db.sessions.put({ id: uid(), bookId: book.id, startedAt, endedAt: startedAt + minutes * 60_000, activeSec: minutes * 60, pauses: [], mode: 'manual', pageFrom: parseOptionalNumber(data.get('pageFrom')), pageTo: parseOptionalNumber(data.get('pageTo')), note: String(data.get('note')).trim() || undefined }); await db.books.update(book.id, { updatedAt: Date.now() }); await onSaved(); onClose(); }
   return <Dialog title="독서 기록 추가" onClose={onClose}><form onSubmit={submit} className="form-grid"><label className="wide">날짜와 시각<input name="date" type="datetime-local" required defaultValue={toLocalInput(Date.now())} /></label><label>읽은 시간(분)<input name="minutes" type="number" min="1" required /></label><span /><label>시작 쪽<input name="pageFrom" type="number" min="0" /></label><label>마지막 쪽<input name="pageTo" type="number" min="0" /></label><label className="wide">메모<textarea name="note" rows={3} /></label><div className="form-actions wide"><button type="button" onClick={onClose}>취소</button><button className="primary" type="submit">저장</button></div></form></Dialog>;
 }
 
 function QuoteForm({ book, onClose, onSaved }: { book: Book; onClose: () => void; onSaved: () => Promise<void> }) {
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); await db.quotes.put({ id: uid(), bookId: book.id, text: String(data.get('text')).trim(), page: Number(data.get('page')) || undefined, memo: String(data.get('memo')).trim() || undefined, origin: 'typed', createdAt: Date.now() }); await onSaved(); onClose(); }
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); await db.quotes.put({ id: uid(), bookId: book.id, text: String(data.get('text')).trim(), page: parseOptionalNumber(data.get('page')), memo: String(data.get('memo')).trim() || undefined, origin: 'typed', createdAt: Date.now() }); await onSaved(); onClose(); }
   return <Dialog title="문장 담기" onClose={onClose}><form onSubmit={submit} className="form-grid"><p className="wide form-intro">{book.title}</p><label className="wide">마음에 남은 문장<textarea name="text" rows={5} required autoFocus /></label><label>쪽수<input name="page" type="number" min="0" /></label><label>메모<input name="memo" /></label><div className="form-actions wide"><button type="button" onClick={onClose}>취소</button><button className="primary" type="submit">담기</button></div></form></Dialog>;
 }
 
