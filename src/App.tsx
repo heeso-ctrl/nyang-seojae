@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { db, exportBackup, importBackup } from './db';
 import { activeSeconds, isPaused, localDayBounds } from './timer';
 import { parseOptionalNumber, resolveProgress } from './progress';
@@ -532,8 +532,13 @@ function KakaoBookSearch({ onSelect, onOpenSettings }: { onSelect: (book: KakaoB
     } catch (error) { setMessage(kakaoErrorMessage(error)); }
     finally { setLoading(false); }
   }
+  function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    void search();
+  }
   if (!key) return <section className="book-search wide"><strong>책 검색</strong><p>설정에서 카카오 키를 넣으면 책 정보를 자동으로 채울 수 있어요.</p><button type="button" onClick={onOpenSettings}>설정으로 이동</button></section>;
-  return <section className="book-search wide"><strong>책 검색</strong>{online ? <div className="book-search-row"><input aria-label="카카오 책 검색어" value={query} onChange={(event) => setQuery(event.target.value)} /><button type="button" onClick={() => void search()}>찾기</button></div> : <p>인터넷 연결 시 사용 가능</p>}{loading && <p role="status">찾는 중…</p>}{message && <p role="status">{message}</p>}{results.length > 0 && <div className="search-results">{results.map((result, index) => <button type="button" key={`${result.isbn ?? result.title}-${index}`} onClick={() => { onSelect(result); setResults([]); setMessage('책 정보를 채웠습니다.'); }}>{result.coverUrl ? <img src={result.coverUrl} alt="" /> : <span className="search-cover-empty" aria-hidden="true" />}<span><b>{result.title}</b><small>{[result.author, result.publisher, result.publishedYear].filter(Boolean).join(' · ')}</small></span></button>)}</div>}<small className="search-credit">검색: 카카오</small></section>;
+  return <section className="book-search wide"><strong>책 검색</strong>{online ? <div className="book-search-row"><input aria-label="카카오 책 검색어" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={handleSearchKeyDown} /><button type="button" onClick={() => void search()}>찾기</button></div> : <p>인터넷 연결 시 사용 가능</p>}{loading && <p role="status">찾는 중…</p>}{message && <p role="status">{message}</p>}{results.length > 0 && <div className="search-results">{results.map((result, index) => <button type="button" key={`${result.isbn ?? result.title}-${index}`} onClick={() => { onSelect(result); setResults([]); setMessage('책 정보를 채웠습니다.'); }}>{result.coverUrl ? <img src={result.coverUrl} alt="" /> : <span className="search-cover-empty" aria-hidden="true" />}<span><b>{result.title}</b><small>{[result.author, result.publisher, result.publishedYear].filter(Boolean).join(' · ')}</small></span></button>)}</div>}<small className="search-credit">검색: 카카오</small></section>;
 }
 
 function FinishForm({ timer, book, onClose, onSaved, onDiscard }: { timer: ActiveTimer; book: Book; onClose: () => void; onSaved: () => Promise<void>; onDiscard: () => Promise<void> }) {
