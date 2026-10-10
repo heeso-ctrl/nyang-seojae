@@ -1,0 +1,9 @@
+{
+  "anchor": "2:3 그림 상자 기준 %: x = 가로 중심, y = 발끝, h = 키. 다섯 테마 공통. 이미지는 고양이 몸에 맞게 잘라 둔 것.",
+  "sprites": {
+    "reading":  { "file": "reading-base.webp",  "x": 68.25, "y": 70.25, "h": 26.5,  "flip": false },
+    "idle":     { "file": "idle-base.webp",     "x": 68,    "y": 69.75, "h": 21.75, "flip": false },
+    "resting":  { "file": "resting-base.webp",  "x": 68.25, "y": 70.25, "h": 26.4,  "flip": false },
+    "sleeping": { "file": "sleeping-base.webp", "x": 65.5,  "y": 71.75, "h": 16.7,  "flip": false }
+  }
+}

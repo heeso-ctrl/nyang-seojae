@@ -1,0 +1,557 @@
+<title>냥서재 그림 작업대</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
+<style>
+/* 작업대: 위는 GPT에 붙일 프롬프트, 아래는 받은 그림을 겹쳐 보는 판. 종이 흰색 + 먹색, 선택은 검정 면. */
+:root {
+  --paper: #FFFFFF;
+  --ink: #2A2420;
+  --ink-soft: #5E564F;
+  --rule: #D6CFC5;
+  --chip: #F4F1EC;
+  --focus: #3F6A96;
+  --font-display: "Jua", "Gowun Dodum", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+html, body { background: var(--paper); color: var(--ink); }
+body { font-family: var(--font-body); font-size: 17px; line-height: 1.6; padding-inline: 16px; padding-block: 20px 48px; }
+.wrap { max-width: 1080px; margin-inline: auto; display: grid; gap: 32px; }
+header { display: grid; gap: 6px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; margin: 0; line-height: 1.25; text-wrap: balance; }
+h1 { font-size: 2rem; } h2 { font-size: 1.5rem; } h3 { font-size: 1.15rem; }
+.lede { margin: 0; color: var(--ink-soft); max-width: 64ch; }
+section { display: grid; gap: 18px; }
+.step { display: grid; gap: 8px; border-top: 2px solid var(--rule); padding-top: 14px; min-width: 0; }
+.step p { margin: 0; color: var(--ink-soft); max-width: 68ch; }
+pre.prompt { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.5; background: var(--chip); border: 1.5px solid var(--rule); border-radius: 10px; padding: 12px; max-height: 240px; overflow: auto; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+a.filebtn { text-decoration: none; }
+button, .filebtn { min-height: 44px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 999px; background: var(--paper); color: var(--ink); font: inherit; font-size: 0.98rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+button.copy { border-radius: 10px; }
+button:focus-visible, .filebtn:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+.filebtn input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.msg { font-size: 0.92rem; color: var(--ink-soft); min-height: 1.4em; }
+ol.tips { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; max-width: 72ch; }
+.bench { display: grid; gap: 24px; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 900px) { .bench { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1fr); } }
+.phone { position: relative; width: 100%; max-width: 440px; justify-self: center; aspect-ratio: 2 / 3; border: 3px solid var(--ink); border-radius: 22px; overflow: hidden; background: #DDD7CF; }
+.phone .bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; max-width: none; }
+.phone .cat, .phone .cmp { position: absolute; transform: translateX(-50%); max-width: none; pointer-events: none; }
+.phone .cat { pointer-events: auto; cursor: grab; touch-action: none; -webkit-user-drag: none; user-select: none; }
+.phone .cat.dragging { cursor: grabbing; outline: 2px dashed #FFFDF8; outline-offset: 2px; }
+.phone:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.stagecol { display: grid; gap: 12px; justify-items: center; min-width: 0; }
+@media (min-width: 900px) { .stagecol { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); } }
+.nudge { width: 100%; max-width: 440px; display: grid; gap: 10px; border: 2px solid var(--ink); border-radius: 16px; padding: 12px; box-sizing: border-box; }
+.nudge .readout { font-variant-numeric: tabular-nums; font-size: 1.05rem; color: var(--ink); text-align: center; }
+#tapMode[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.phone.tapping { cursor: crosshair; outline: 3px dashed var(--focus); outline-offset: 3px; }
+.pad { display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 48px); gap: 6px; justify-content: center; }
+.pad button, .sz button { min-height: 0; padding: 0; justify-content: center; border-radius: 12px; font-size: 1.25rem; }
+.pad .up { grid-column: 2; grid-row: 1; } .pad .left { grid-column: 1; grid-row: 2; } .pad .right { grid-column: 3; grid-row: 2; } .pad .down { grid-column: 2; grid-row: 3; }
+.pad .reset { grid-column: 2; grid-row: 2; font-size: 0.8rem; }
+.mv { display: grid; gap: 4px; }
+.mv label { font-family: var(--font-display); font-size: 1rem; }
+.mvrow { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px 3.4em; gap: 8px; align-items: center; }
+.mvrow input[type=range] { height: 44px; }
+.mvrow .fine { min-height: 44px; padding: 0; justify-content: center; border-radius: 12px; font-size: 1.1rem; }
+.mvrow .val { font-variant-numeric: tabular-nums; text-align: right; font-size: 1rem; }
+.nudge-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; }
+.sz { display: grid; grid-template-columns: 52px 52px; gap: 6px; }
+.sz button { height: 48px; }
+.steps { display: flex; gap: 6px; }
+.steps button { min-height: 40px; padding: 0 12px; font-size: 0.9rem; border-radius: 10px; }
+.steps button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+details.archive { margin-top: 6px; } details.archive summary { cursor: pointer; color: var(--ink-soft); font-size: 0.95rem; min-height: 32px; }
+details.archive .list { margin-top: 6px; }
+.list button.archived { border-style: dashed; color: var(--ink-soft); }
+
+.phone .cmp { opacity: 0.5; }
+.phone .shadow { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; filter: blur(8px); pointer-events: none; }
+.phone.sim-color img { filter: saturate(0.55) contrast(0.92) brightness(1.04); }
+.phone.sim-mono img { filter: grayscale(1) contrast(1.05); }
+.quote { position: absolute; left: 7%; top: 6%; color: #FFFDF8; font-size: clamp(13px, 3.6vw, 17px); line-height: 1.55; white-space: pre-line; font-family: var(--font-body); }
+.card { position: absolute; left: 3%; right: 3%; bottom: 2.5%; background: #FFFFFF; border: 2px solid var(--ink); border-radius: 16px; padding: 10px 12px; display: grid; gap: 8px; color: var(--ink); }
+.card .top { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.card .cv { width: 30px; height: 42px; border: 1.5px solid var(--ink); border-radius: 3px; background: #7FA6CF; flex: none; }
+.card .tx { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.card small { font-size: 0.8rem; color: var(--ink-soft); line-height: 1.3; }
+.card b { font-weight: 400; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.bar { height: 6px; border-radius: 3px; background: #E7E2DA; overflow: hidden; } .bar i { display: block; height: 100%; width: 38%; background: #5FB27A; }
+.card .min { font-family: var(--font-display); font-size: 1.5rem; line-height: 1; }
+.card .bt { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.card .bt span { border: 1.5px solid var(--ink); border-radius: 10px; text-align: center; font-size: 0.82rem; padding: 6px 0; }
+.panel { display: grid; gap: 16px; min-width: 0; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.field label, .field .lab { font-family: var(--font-display); font-size: 1.05rem; }
+.slider { display: grid; grid-template-columns: 5.5em minmax(0, 1fr) 3.2em; gap: 10px; align-items: center; }
+.slider span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
+input[type=range] { width: 100%; accent-color: var(--ink); height: 32px; }
+input[type=color] { width: 48px; height: 44px; border: 2px solid var(--ink); border-radius: 10px; background: var(--paper); padding: 2px; }
+select { min-height: 44px; border: 2px solid var(--ink); border-radius: 10px; font: inherit; padding: 0 10px; background: var(--paper); color: var(--ink); max-width: 100%; }
+.check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+.check input { width: 22px; height: 22px; accent-color: var(--ink); }
+textarea { width: 100%; box-sizing: border-box; min-height: 110px; font-family: var(--font-mono); font-size: 12px; border: 1.5px solid var(--rule); border-radius: 10px; padding: 10px; background: var(--chip); color: var(--ink); }
+.list { display: flex; flex-wrap: wrap; gap: 6px; }
+.list button { min-height: 40px; font-size: 0.9rem; border-radius: 10px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.note { margin: 0; font-size: 0.92rem; color: var(--ink-soft); max-width: 70ch; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>냥서재 그림 작업대</h1>
+    <p class="lede">GPT로 그림을 만들고, 받은 그림을 여기 올려 앱 화면처럼 겹쳐 봅니다. 고양이 위치와 크기를 맞춘 값은 복사해서 앱 설정에 넣습니다. 올린 그림과 맞춘 값은 이 작업대에 저장되어 다음에 열어도 남고, Claude가 직접 보고 같이 고칠 수 있습니다.</p>
+  </header>
+
+  <nav class="row" aria-label="바로 가기"><a class="filebtn" href="#bench">2. 그림 겹쳐 보기로 바로 가기</a></nav>
+  <section aria-labelledby="h-prompt">
+    <h2 id="h-prompt">1. GPT에 붙일 프롬프트</h2>
+    <div class="step"><h3>지금 할 일 · 새 대화방에서 나머지 배경을 기준 그림체로</h3>
+      <ol class="tips">
+        <li>GPT에서 <b>새 대화</b>를 엽니다. 기준 그림(달빛 배경 새 그림체)을 첨부하고 아래 ‘그림체 고정’을 붙입니다. “OK”가 오면 다음으로.</li>
+        <li>테마를 고르고, 그 테마의 <b>예전 배경</b>을 첨부해 ‘테마 한 장’을 붙입니다. 한 메시지에 한 장만.</li>
+        <li>그림체가 덜 맞으면 ‘덜 맞을 때’를 붙입니다. 같은 대화에서 두 번 넘게 오류가 나거나 같은 그림이 반복되면, 새 대화를 열고 1번부터 다시 합니다.</li>
+        <li>받은 그림은 작업대에 올리면 됩니다. 고양이는 지금 그림 그대로 씁니다.</li>
+      </ol>
+      <h3>그림체 고정 · 기준 그림 첨부</h3><pre class="prompt" id="pNcLock"></pre><div class="row"><button class="copy" data-copy="pNcLock">복사</button><span class="msg" aria-live="polite"></span></div>
+      <h3>테마 한 장 · 그 테마의 예전 배경 첨부</h3><div class="chips" id="cNc"></div><pre class="prompt" id="pNcTheme"></pre><div class="row"><button class="copy" data-copy="pNcTheme">복사</button><span class="msg" aria-live="polite"></span></div>
+      <h3>덜 맞을 때</h3><pre class="prompt" id="pNcFix"></pre><div class="row"><button class="copy" data-copy="pNcFix">복사</button><span class="msg" aria-live="polite"></span></div>
+    </div>
+    <div class="step"><h3>요령</h3><ol class="tips" id="tips"></ol></div>
+    <div class="step"><h3>① 스타일 기준 · 대화를 시작할 때 한 번</h3><pre class="prompt" id="pStyle"></pre><div class="row"><button class="copy" data-copy="pStyle">복사</button><span class="msg" aria-live="polite"></span></div></div>
+    <div class="step"><h3>② 배경 · 테마마다 한 장</h3><p>테마를 고르면 완성된 문장이 나옵니다. 고양이 없이 빈 쿠션, 책 없는 책장으로 받습니다.</p><div class="chips" id="cTheme"></div><pre class="prompt" id="pBg"></pre><div class="row"><button class="copy" data-copy="pBg">복사</button><span class="msg" aria-live="polite"></span></div></div>
+    <div class="step"><h3>③ 고양이 기본 · 읽는 중</h3><p>흰 고양이를 떼어내기 쉽게 자홍색 배경으로 받습니다.</p><pre class="prompt" id="pCat"></pre><div class="row"><button class="copy" data-copy="pCat">복사</button><span class="msg" aria-live="polite"></span></div></div>
+    <div class="step"><h3>④ 다른 자세 · ③ 그림을 첨부하고</h3><div class="chips" id="cPose"></div><pre class="prompt" id="pPose"></pre><div class="row"><button class="copy" data-copy="pPose">복사</button><span class="msg" aria-live="polite"></span></div></div>
+    <div class="step"><h3>⑤ 옷 · 해당 자세 그림을 첨부하고</h3><div class="chips" id="cOutfit"></div><pre class="prompt" id="pOutfit"></pre><div class="row"><button class="copy" data-copy="pOutfit">복사</button><span class="msg" aria-live="polite"></span></div></div>
+    <div class="step"><h3>⑥ 배경을 고양이 그림체로 다시 그리기 · 고양이 하나와 배경 하나를 함께 첨부하고 (추천)</h3><p>배경을 고양이처럼 선이 있고 색이 평평한 그림으로 바꿉니다. 그러데이션과 잔무늬를 없애서 컬러 e잉크에서도 또렷하게 보이게 합니다. 배경마다 한 번씩.</p><pre class="prompt" id="pRestyle"></pre><div class="row"><button class="copy" data-copy="pRestyle">복사</button><span class="msg" aria-live="polite"></span></div></div>
+    <div class="step"><h3>⑦ (반대 방향) 배경에 맞춰 고양이 다시 그리기 · 고양이 그림과 배경 하나를 함께 첨부하고</h3><p>⑥ 대신 고양이를 붓칠 그림으로 바꾸는 방법입니다. e잉크에서는 ⑥이 더 낫습니다. 자세마다 한 번씩. 모든 배경의 독서등이 왼쪽에 있어서, 배경 하나에 맞추면 다른 테마에도 대체로 어울립니다.</p><pre class="prompt" id="pMatch"></pre><div class="row"><button class="copy" data-copy="pMatch">복사</button><span class="msg" aria-live="polite"></span></div></div>
+  </section>
+
+  <section aria-labelledby="h-bench">
+    <h2 id="h-bench"><a id="bench"></a>2. 받은 그림 겹쳐 보기</h2>
+    <p class="note" id="exNote">지금 보이는 방과 고양이는 예시입니다. 배경과 고양이 그림을 올리면 바뀝니다.</p>
+    <p class="note" id="saveNote" aria-live="polite"></p>
+    <div class="bench">
+      <div class="stagecol">
+      <div class="phone" id="phone" tabindex="0" aria-label="미리보기. 고양이를 끌거나 화살표 키로 옮길 수 있어요">
+        <img class="bg" id="bgImg" alt="배경">
+        <div class="shadow" id="shadow" hidden></div>
+        <img class="cmp" id="cmpImg" alt="" hidden>
+        <img class="cat" id="catImg" alt="고양이">
+        <div class="quote" id="quote">좋은 이야기가
+오늘도 우리를
+좋은 곳으로 데려가요.</div>
+        <div class="card" id="card">
+          <div class="top"><div class="cv"></div>
+            <div class="tx"><small>고양이와 읽는 중</small><b>작은 별의 지도</b><div class="bar"><i></i></div></div>
+            <div class="min">12분</div></div>
+          <div class="bt"><span>일시 정지</span><span>독서 종료</span><span>문장 담기</span></div>
+        </div>
+      </div>
+      <div class="nudge" aria-label="고양이 위치 조절">
+        <div class="readout" id="readout" hidden></div>
+        <div class="mv"><label for="sX">가로 (왼쪽 ↔ 오른쪽)</label><div class="mvrow"><button type="button" class="fine" data-f="x,-1" aria-label="왼쪽으로 조금">－</button><input type="range" id="sX" min="0" max="100" step="0.25"><button type="button" class="fine" data-f="x,1" aria-label="오른쪽으로 조금">＋</button><span class="val" id="vX"></span></div></div>
+        <div class="mv"><label for="sY">높이 (위 ↔ 아래, 발끝 위치)</label><div class="mvrow"><button type="button" class="fine" data-f="y,-1" aria-label="위로 조금">－</button><input type="range" id="sY" min="30" max="100" step="0.25"><button type="button" class="fine" data-f="y,1" aria-label="아래로 조금">＋</button><span class="val" id="vY"></span></div></div>
+        <div class="mv"><label for="sH">크기</label><div class="mvrow"><button type="button" class="fine" data-f="h,-1" aria-label="작게 조금">－</button><input type="range" id="sH" min="10" max="60" step="0.25"><button type="button" class="fine" data-f="h,1" aria-label="크게 조금">＋</button><span class="val" id="vH"></span></div></div>
+        <div class="nudge-row"><button type="button" id="mvReset" class="copy">처음 자리로</button></div>
+        <label class="check" style="justify-content:center"><input type="checkbox" id="perBg">이 배경에서만 따로 맞추기</label>
+        <p class="note" style="text-align:center">± 버튼은 한 번에 0.5씩 움직이고, 길게 누르면 계속 움직입니다.</p>
+      </div>
+      </div>
+
+      <div class="panel">
+        <div class="field"><span class="lab">그림 올리기</span>
+          <div class="row">
+            <label class="filebtn">배경 올리기<input type="file" id="fBg" accept="image/*" multiple></label>
+            <label class="filebtn">고양이 올리기<input type="file" id="fCat" accept="image/*" multiple></label>
+          </div>
+        </div>
+        <div class="field"><span class="lab">배경</span><div class="list" id="lBg"></div><div class="row"><button type="button" id="arcBg" class="copy">선택한 배경 보관함으로</button></div></div>
+        <div class="field"><span class="lab">고양이</span><div class="list" id="lCat"></div><div class="row"><button type="button" id="arcCat" class="copy">선택한 고양이 보관함으로</button></div></div>
+        <div class="field"><span class="lab">고양이 배경색 지우기</span>
+          <div class="row"><label class="check"><input type="checkbox" id="keyOn" checked>지우기</label>
+            <input type="color" id="keyColor" value="#ff00ff" aria-label="지울 색">
+          </div>
+          <div class="slider"><span>허용 범위</span><input type="range" id="keyTol" min="10" max="180" value="80"><span id="vTol">80</span></div>
+        </div>
+        <div class="field"><span class="lab">고양이 방향</span>
+          <label class="check"><input type="checkbox" id="flip">좌우 뒤집기</label>
+        </div>
+        <div class="field"><span class="lab">배경에 어울리게</span>
+          <label class="check"><input type="checkbox" id="hOn" checked>켜기</label>
+          <div class="slider"><span>주변 색</span><input type="range" id="hTint" min="0" max="70"><span id="vTint"></span></div>
+          <div class="row"><label for="hLight">빛 방향</label><select id="hLight"><option value="left">왼쪽에서</option><option value="right">오른쪽에서</option><option value="none">없음</option></select></div>
+          <div class="slider"><span>빛 세기</span><input type="range" id="hLightAmt" min="0" max="45"><span id="vLightAmt"></span></div>
+          <div class="slider"><span>선 부드럽게</span><input type="range" id="hLine" min="0" max="90"><span id="vLine"></span></div>
+          <div class="slider"><span>바닥 그림자</span><input type="range" id="hShadow" min="0" max="100"><span id="vShadow"></span></div>
+        </div>
+        <div class="field"><label for="cmpSel">겹쳐 비교할 고양이 (반투명)</label><select id="cmpSel"><option value="">없음</option></select></div>
+        <div class="field"><span class="lab">화면</span>
+          <div class="row"><label class="check"><input type="checkbox" id="showCard" checked>타이머 카드</label><label class="check"><input type="checkbox" id="showQuote" checked>문구</label></div>
+          <div class="chips" id="cView"></div>
+        </div>
+        <div class="field"><label for="out">정렬값 (앱 설정에 붙일 것)</label><textarea id="out" readonly></textarea>
+          <div class="row"><button class="copy" data-copy="out">정렬값 복사</button><span class="msg" aria-live="polite"></span></div>
+        </div>
+      </div>
+    </div>
+    <p class="note">‘컬러 e잉크 흉내’는 노트북에서 대략 짐작하려고 채도를 낮춘 것입니다. 최종 판단은 BOOX에서 이 페이지를 열어서 하세요.</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"P":{"NC_LOCK":"I'm making background art for my personal reading app. The attached image is the STYLE REFERENCE. Every image I ask for in this chat must match its drawing style exactly:\n- Clean, even warm-brown outlines on every object (slightly thinner on small or distant things).\n- Flat cel colors with one soft shadow tone and a few simple highlights. No painterly brush strokes, no photographic lighting, no noise or grain.\n- Simplified textures: a knit blanket is a few simple rows, a rug is plain stripes, wood is flat color with a few lines.\n- Warm, cozy, gentle palette. Lamp light only as a small soft halo around the lamp.\n- Portrait 2:3 (1024x1536). No cat, person or animal. No text, letters, logos or watermark.\nSame room layout every time: window upper-left, a lamp on a small round side table lower-left, a tall bookshelf on the right with only a few decorations and mostly EMPTY shelves, a big round cushion/beanbag in the lower center-right with pillows and a blanket, a rug at the bottom. Keep the bottom 18% simple.\nReply only \"OK\" and wait.","NC_THEME":"Redraw the attached room in the style of the reference image. Keep this room's theme, colors, window view and objects, but use the reference's layout and drawing style. Make one image only.\nTheme: {THEME}","NC_FIX":"Closer to the reference style, please: cleaner and more even outlines, flatter colors with only one shadow tone, simpler textures, no glow except a small halo around the lamp. Keep the same layout and theme. One image only.","NC_THEMES":[{"id":"attic","name":"다락방","text":"attic at night: slanted roof window with a crescent moon, stars and rooftops; stained-glass table lamp; a globe and a world map on the wall; dark red cushion with a floral pillow and a red plaid blanket. Palette: warm brown, deep red, gold, navy."},{"id":"forest","name":"숲속 산장","text":"wooden cabin in daylight: window with pine forest, a lake and mountains under a blue sky; cream cushion with a cream knitted pillow and a green plaid blanket; pine cones on the shelf. Palette: forest green, warm wood, cream, sky blue."},{"id":"sea","name":"노을 바닷가","text":"sunset by the sea: open window with a balcony railing; calm sea, a small sailboat, a lighthouse and white houses on a cliff; potted lemon tree; cream cushion with a blue-and-white striped pillow and a blue knit blanket. Palette: peach, coral, sea blue, cream."},{"id":"rain","name":"비 오는 저녁","text":"rainy evening: window with raindrops and a city street with lit windows and street lamps; an umbrella stand; cream cushion with a navy plaid blanket. Palette: blue-gray, warm brown, soft amber."}],"RESTYLE":"I attached two images: (1) our cat, (2) one of our room backgrounds.\nRedraw the BACKGROUND (image 2) in the SAME drawing style as the cat (image 1), keeping everything else:\n- Keep the exact same layout, furniture, window view, colors and theme — same positions and sizes, portrait 2:3, 1024x1536.\n- Change only the drawing style to match the cat: clear dark-brown outlines (#3A332E, about 2px; 1.5px for small or distant things), flat colors with at most one simple shadow tone, no painterly brushwork.\n- Remove gradients, glow, light rays, blur and fine textures (knit, wood grain, fabric weave, rug fibers). Show lamp light only as a flat pale shape if needed.\n- Make colors slightly brighter and more saturated than the original (it will be shown on a color e-ink screen where colors look faded). Avoid very dark areas; the night sky can stay navy but keep the room readable.\n- Still NO cat, person or animal. Keep the cushion seat empty and the bookshelf boards mostly empty of books.","MATCH":"I attached two images: (1) our cat, (2) one of our room backgrounds.\nRedraw ONLY the cat — same pose, same size and same position on the canvas, same perfectly flat solid magenta (#FF00FF) background — so that it looks like it was painted INTO that room:\n- Use the same soft hand-painted look as the background. No thick dark outline; at most a thin warm-brown line where needed.\n- Warm lamp light comes from the upper LEFT: the left side of the head and body is brighter warm cream, the right side, under the chin, under the arms and under the book get soft warm shadows.\n- Fur is warm ivory, not pure white. Gray stripes stay soft.\n- Keep the face exactly the same and just as cute: same eyes, tiny pink nose, small \"ω\" mouth, pink blush, forehead stripes, whiskers.\n- Do not draw any floor, cushion, shadow or other object on the magenta background.","STYLE":"You are making art assets for my personal reading-tracker app \"Nyangseojae\". Every image in this chat must share ONE consistent style and ONE consistent cat.\n\nSTYLE (one style for the cat AND the backgrounds — clean cel-style illustration that reads well on a color e-ink screen)\n- Clean 2D cel-style illustration, like a cute picture book: clear dark-brown outlines (#3A332E) on everything, flat colors with at most one simple shadow tone, no painterly brushwork.\n- Outlines: about 3px at 1024px for the cat, about 2px for furniture and objects, about 1.5px for small or distant things.\n- No gradients, no glow or bloom, no light rays, no blur, no fine textures (no knit, wood-grain or fabric detail), no tiny patterns. The app runs on a 7-inch COLOR E-INK screen whose color resolution is low and whose colors look faded, so use medium-to-large shapes, clear contrast, and slightly brighter, more saturated colors than usual.\n- Never put any text, letters, numbers, logos, signatures, watermarks, or app UI in the image.\n\nTHE CAT (keep identical in every image)\n- A small, slim white kitten (not chubby), about 2.5 heads tall, slightly long body and legs.\n- 3/4 view: face and body turned toward the viewer's LEFT, about 30 degrees from front. Both eyes visible; the far eye slightly smaller.\n- Large rounded-triangle ears with pink insides. Three short light-gray tabby stripes on the forehead, a few faint gray stripes on the back and tail.\n- Small solid black oval eyes with one tiny white highlight, a tiny pink nose, a small \"ω\"-shaped mouth, soft pink blush on the cheek, 2-3 short dark whiskers on each side.\n- Long thin tail curling up behind on the right.\nReply \"OK\" and wait for my next request.","BG":"Using the agreed style, draw an EMPTY cozy reading-nook background. Portrait 2:3, 1024x1536.\nTheme: {THEME}\n\nLayout (follow exactly):\n- A window in the upper-left showing the outdoor view.\n- A tall bookshelf on the right side, from the top down to about 60% of the height.\n- A small round side table on the lower-left with a desk lamp, a mug and 2-3 stacked books.\n- A big soft cushion / beanbag in the lower center-right, with its seat facing the viewer.\n\nVery important:\n- NO cat, NO person, NO animal anywhere.\n- Keep the cushion seat clearly empty. A cat will be placed later inside the box from 32% to 80% of the width and 42% to 84% of the height, so keep that area simple (cushion and blanket only).\n- Keep the bottom 18% of the image calm and plain (floor, blanket edge) because an interface card will cover it.\n- On the bookshelf put only a few decorations (small plants, a frame, a jar). Leave the shelf boards mostly EMPTY of books; the app will add books later.\n- Keep the upper-left sky area fairly calm.","THEMES":[{"id":"moon","name":"달빛 서재","text":"night reading room. Outside: deep navy sky, a crescent moon, a few stars, distant houses with warm lit windows. Inside: warm amber desk-lamp light, trailing pothos plants, lavender and cream cushion. Palette: navy, lavender, warm amber."},{"id":"rain","name":"비 오는 창가","text":"rainy evening. Outside: a city street in the rain with soft blurred street lights and raindrops on the glass. Inside: warm lamp light, a plaid blanket on the cushion, an umbrella stand. Palette: blue-gray, warm brown, soft amber."},{"id":"sea","name":"노을 바닷가","text":"sunset by the sea. Outside (through an open window with a balcony railing): a calm sea, a small sailboat, a lighthouse on a cliff with white houses. Inside: a potted lemon tree, a blue-and-white striped cushion. Palette: peach, coral, sea blue, cream."},{"id":"forest","name":"숲속 오두막","text":"wooden cabin in daylight. Outside: pine forest, a lake and soft mountains. Inside: log walls, pine cones, a green plaid blanket, cream knitted pillow. Palette: forest green, warm wood, cream."},{"id":"attic","name":"다락방","text":"attic study at night with a slanted roof window. Outside: starry sky, crescent moon, rooftops. Inside: a stained-glass style table lamp, a globe, a world map on the wall, a dark red armchair-cushion with a floral pillow. Palette: warm brown, deep red, gold, navy."},{"id":"line","name":"선화 (흑백 e잉크용)","text":"the same cozy reading room drawn as BLACK-AND-WHITE LINE ART ONLY: clean black lines on pure white, no color, no gray, no shading, like a coloring-book page. A window with a simple outdoor view, plants, lamp, cushion."}],"CAT":"Using the agreed style and cat, draw ONLY the cat. Square 1024x1024.\nBackground: a perfectly flat, solid magenta color (#FF00FF) filling the whole image — no gradient, no floor, no shadow, no cushion, no other objects except the book.\nPose (READING): sitting on its bottom, 3/4 view facing left, holding an open hardcover book with both front paws in front of the chest, looking down at the book, tail curling up behind on the right.\nFraming: the whole cat is visible, centered horizontally, the lowest point of the cat at about 92% of the image height, the cat about 70% of the image height.","POSE":"Here is our cat (attached). Redraw the EXACT same cat — same size on the canvas, same position, same 3/4 angle facing left, same outline thickness, same colors, same solid magenta (#FF00FF) background — and change ONLY the pose:\n{POSE}\nKeep the lowest point of the cat at about 92% of the image height.","POSES":[{"id":"resting","name":"쉬는 중","text":"holding a warm mug with both front paws, eyes closed in a happy curved smile, the closed book resting on its lap."},{"id":"sleeping","name":"자는 중","text":"curled up asleep in a round loaf, eyes closed, chin resting on the closed book, tail wrapped around the body. (No \"z\" letters or any text.)"},{"id":"idle","name":"대기","text":"sitting upright with both front paws together, looking at the viewer with a small smile, the closed book standing next to it."}],"OUTFIT":"Here is our cat (attached). Keep EVERYTHING identical — same pose, size, position on the canvas, angle, outline, colors and solid magenta (#FF00FF) background. Only add this outfit:\n{ITEM}\nThe outfit must fit the 3/4 angle naturally and must not cover the eyes or the book.","OUTFITS":[{"id":"beret","name":"베레모","text":"a small red felt beret, tilted toward the right ear."},{"id":"knit","name":"귀 달린 털모자","text":"a soft blue knitted beanie with two little ear-shaped points, the cat ears hidden inside."},{"id":"scarf","name":"줄무늬 목도리","text":"a cozy coral-and-cream striped knitted scarf wrapped around the neck, one end hanging down the chest."},{"id":"sweater","name":"보라 스웨터","text":"a lavender knitted sweater with two cream stripes; the front paws come out of the sleeves."},{"id":"flower","name":"꽃 화관","text":"a small crown of tiny white and pink flowers resting between the ears."},{"id":"raincoat","name":"노란 우비","text":"a small yellow raincoat with the hood down and two round buttons."},{"id":"crown","name":"작은 왕관","text":"a tiny golden crown sitting between the ears."}],"TIPS":["한 대화창 안에서 순서대로: ① 스타일 기준 → ② 배경들 → ③ 고양이 기본(읽는 중) → ④ 다른 자세 → ⑤ 옷.","③에서 마음에 드는 고양이가 나오면, 그 뒤로는 항상 그 이미지를 첨부해서 \"this exact cat\"으로 요청하세요. 첨부하지 않으면 매번 다른 고양이가 나옵니다.","자세나 크기가 조금씩 틀어지는 건 정상입니다. 작업대에서 위치·크기를 맞추면 됩니다. 얼굴 생김새가 달라졌으면 다시 생성하세요.","옷은 자유 조합 대신 \"코디 세트\" 단위로 만듭니다. 모자 4 × 옷 4를 자유롭게 섞으면 자세마다 16장이 필요해서 감당이 안 됩니다. 처음에는 \"읽는 중\" 자세에만 옷을 입히세요.","고양이가 흰색이라 배경을 흰색으로 하면 떼어내기 어렵습니다. 그래서 자홍색(#FF00FF) 배경으로 받고, 작업대에서 그 색을 지웁니다. GPT가 투명 배경 PNG를 바로 주면 그걸 써도 됩니다.","원래 앱에 있는 개구리 모자, 우주복, 큰 리본, 고양이 귀 후드, 동그란 안경 차림은 넣지 마세요. 그 앱의 모습을 따라 하게 됩니다.","파일 이름 예시: bg-moon.png, cat-reading-base.png, cat-reading-beret.png, cat-resting-base.png"]},"exBg":"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20360%20440%22%20style%3D%22--fur%3A%23FFFFFF%3B--fur-dark%3A%23D9D3CB%3B--belly%3A%23F6F3EE%3B--face%3A%233A332E%3B--nose%3A%23EFA3A3%3B--ear-in%3A%23F7CFC8%3B--blush%3A%23F6C2BD%3B--zz%3A%23FFF1C9%3B--book%3A%237FA6CF%3B--mug%3A%238DBB8A%22%20role%3D%22img%22%20aria-label%3D%22%EB%B0%A4%20%EC%B0%BD%EA%B0%80%20%EB%B0%A9%2C%20%EC%B1%85%EC%9E%A5%EC%97%90%20%EB%8B%A4%20%EC%9D%BD%EC%9D%80%20%EC%B1%85%2018%EA%B6%8C%22%3E%3Cdefs%3E%3CclipPath%20id%3D%22win-ex%22%3E%3Crect%20x%3D%2222%22%20y%3D%2228%22%20width%3D%22122%22%20height%3D%22126%22%2F%3E%3C%2FclipPath%3E%3CclipPath%20id%3D%22pil-ex%22%3E%3Crect%20x%3D%22236%22%20y%3D%22268%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%228%22%2F%3E%3C%2FclipPath%3E%3C%2Fdefs%3E%3Crect%20width%3D%22360%22%20height%3D%22300%22%20fill%3D%22%2334405E%22%2F%3E%3Crect%20y%3D%22300%22%20width%3D%22360%22%20height%3D%22140%22%20fill%3D%22%234A3F5A%22%2F%3E%3Cpath%20d%3D%22M0%20300%20L360%20300%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.8%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M0%20332%20L130%20332%20M170%20352%20L360%20352%20M0%20404%20L210%20404%20M240%20420%20L360%20420%22%20stroke%3D%22%233A3149%22%20stroke-width%3D%221.2%22%2F%3E%3Crect%20x%3D%2216%22%20y%3D%2222%22%20width%3D%22134%22%20height%3D%22138%22%20fill%3D%22%23E8E0D0%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.8%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%3Crect%20x%3D%2222%22%20y%3D%2228%22%20width%3D%22122%22%20height%3D%22126%22%20fill%3D%22%231F2742%22%2F%3E%3Cg%20clip-path%3D%22url(%23win-ex)%22%3E%3Cg%20fill%3D%22%23F6E4A0%22%3E%3Ccircle%20cx%3D%2236%22%20cy%3D%2240%22%20r%3D%221.6%22%2F%3E%3Ccircle%20cx%3D%2258%22%20cy%3D%2262%22%20r%3D%221.3%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2238%22%20r%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%2298%22%20cy%3D%2274%22%20r%3D%221.3%22%2F%3E%3Ccircle%20cx%3D%22136%22%20cy%3D%2280%22%20r%3D%221.5%22%2F%3E%3C%2Fg%3E%0A%20%20%20%20%20%20%3Ccircle%20cx%3D%22116%22%20cy%3D%2252%22%20r%3D%2212%22%20fill%3D%22%23F6E4A0%22%2F%3E%3Ccircle%20cx%3D%22122%22%20cy%3D%2247%22%20r%3D%2211%22%20fill%3D%22%231F2742%22%2F%3E%0A%20%20%20%20%20%20%3Cpath%20d%3D%22M22%20154%20L22%20124%20L34%20124%20L34%20114%20L46%20106%20L58%20114%20L58%20126%20L70%20126%20L70%20110%20L84%20110%20L84%20122%20L96%20122%20L96%20102%20L110%2094%20L124%20102%20L124%20120%20L144%20120%20L144%20154%20Z%22%20fill%3D%22%232D3858%22%2F%3E%0A%20%20%20%20%20%20%3Cg%20fill%3D%22%23F6D98A%22%3E%3Crect%20x%3D%2238%22%20y%3D%22118%22%20width%3D%224%22%20height%3D%225%22%2F%3E%3Crect%20x%3D%2250%22%20y%3D%22118%22%20width%3D%224%22%20height%3D%225%22%2F%3E%3Crect%20x%3D%2274%22%20y%3D%22116%22%20width%3D%224%22%20height%3D%225%22%2F%3E%3Crect%20x%3D%22104%22%20y%3D%22106%22%20width%3D%224%22%20height%3D%225%22%2F%3E%3Crect%20x%3D%22112%22%20y%3D%22112%22%20width%3D%224%22%20height%3D%225%22%2F%3E%3Crect%20x%3D%22132%22%20y%3D%22128%22%20width%3D%224%22%20height%3D%225%22%2F%3E%3C%2Fg%3E%0A%20%20%20%20%20%20%3Cg%20fill%3D%22%23263150%22%3E%3Ccircle%20cx%3D%2264%22%20cy%3D%22140%22%20r%3D%2210%22%2F%3E%3Ccircle%20cx%3D%2276%22%20cy%3D%22136%22%20r%3D%2212%22%2F%3E%3Ccircle%20cx%3D%22140%22%20cy%3D%22140%22%20r%3D%2211%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3Crect%20x%3D%2222%22%20y%3D%2228%22%20width%3D%22122%22%20height%3D%22126%22%20fill%3D%22none%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.2%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%3Crect%20x%3D%2280.5%22%20y%3D%2228%22%20width%3D%225%22%20height%3D%22126%22%20fill%3D%22%23E8E0D0%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.2%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%3Crect%20x%3D%2222%22%20y%3D%2288.5%22%20width%3D%22122%22%20height%3D%225%22%20fill%3D%22%23E8E0D0%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.2%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%22158%22%20width%3D%22150%22%20height%3D%2210%22%20rx%3D%222%22%20fill%3D%22%23E8E0D0%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.8%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%3Cg%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.3%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M26%20158%20L24%20142%20L50%20142%20L48%20158%20Z%22%20fill%3D%22%23C98A6A%22%2F%3E%3Cpath%20d%3D%22M30%20142%20Q18%20160%2022%20196%20Q24%20214%2018%20230%20M44%20142%20Q46%20128%2058%20124%20M36%20142%20Q30%20128%2022%20126%22%20fill%3D%22none%22%2F%3E%3Cg%20fill%3D%22%236FA77A%22%3E%3Cellipse%20cx%3D%2258%22%20cy%3D%22124%22%20rx%3D%226%22%20ry%3D%223.5%22%20transform%3D%22rotate(-20%2058%20124)%22%2F%3E%3Cellipse%20cx%3D%2222%22%20cy%3D%22126%22%20rx%3D%226%22%20ry%3D%223.5%22%20transform%3D%22rotate(20%2022%20126)%22%2F%3E%3Cellipse%20cx%3D%2218%22%20cy%3D%22172%22%20rx%3D%225%22%20ry%3D%223%22%20transform%3D%22rotate(70%2018%20172)%22%2F%3E%3Cellipse%20cx%3D%2225%22%20cy%3D%22190%22%20rx%3D%225%22%20ry%3D%223%22%20transform%3D%22rotate(110%2025%20190)%22%2F%3E%3Cellipse%20cx%3D%2219%22%20cy%3D%22210%22%20rx%3D%225%22%20ry%3D%223%22%20transform%3D%22rotate(70%2019%20210)%22%2F%3E%3Cellipse%20cx%3D%2220%22%20cy%3D%22230%22%20rx%3D%225%22%20ry%3D%223%22%20transform%3D%22rotate(95%2020%20230)%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3Cg%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.2%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%3E%3Cg%20transform%3D%22rotate(-5%20172%2070)%22%3E%3Crect%20x%3D%22160%22%20y%3D%2254%22%20width%3D%2226%22%20height%3D%2232%22%20fill%3D%22%23EDE6D6%22%2F%3E%3Crect%20x%3D%22167%22%20y%3D%2250%22%20width%3D%2212%22%20height%3D%226%22%20fill%3D%22%23B6AADA%22%2F%3E%3Cpath%20d%3D%22M173%2080%20Q170%2070%20173%2062%20M173%2070%20Q178%2066%20180%2062%20M173%2074%20Q168%2070%20166%2066%22%20fill%3D%22none%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22rotate(6%20178%20112)%22%3E%3Crect%20x%3D%22166%22%20y%3D%2298%22%20width%3D%2224%22%20height%3D%2226%22%20fill%3D%22%23EDE6D6%22%2F%3E%3Crect%20x%3D%22172%22%20y%3D%2295%22%20width%3D%2212%22%20height%3D%225%22%20fill%3D%22%23B6AADA%22%2F%3E%3Cpath%20d%3D%22M178%20104%20l2%204.5%205%20.6%20-3.6%203.4%201%204.8%20-4.4%20-2.4%20-4.4%202.4%201%20-4.8%20-3.6%20-3.4%205%20-.6%20Z%22%20fill%3D%22%23F6E2A0%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3Crect%20x%3D%22196%22%20y%3D%22-4%22%20width%3D%22160%22%20height%3D%22304%22%20fill%3D%22%235C4C72%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.8%22%2F%3E%3Crect%20x%3D%22204%22%20y%3D%220%22%20width%3D%22144%22%20height%3D%22292%22%20fill%3D%22%2345395A%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.2%22%2F%3E%3Crect%20x%3D%22206%22%20y%3D%2227.9%22%20width%3D%227%22%20height%3D%2228%22%20rx%3D%221%22%20fill%3D%22%237FA6CF%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22213%22%20y%3D%2225.9%22%20width%3D%229%22%20height%3D%2230%22%20rx%3D%221%22%20fill%3D%22%23FFFDF8%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22222%22%20y%3D%2220.9%22%20width%3D%2210%22%20height%3D%2235%22%20rx%3D%221%22%20fill%3D%22%239FBFE0%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Cpath%20d%3D%22M223.5%2025.9%20L230.5%2025.9%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%220.9%22%2F%3E%3Crect%20x%3D%22232%22%20y%3D%2214.9%22%20width%3D%228%22%20height%3D%2241%22%20rx%3D%221%22%20fill%3D%22%23E8A2B4%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22240%22%20y%3D%2224.9%22%20width%3D%227%22%20height%3D%2231%22%20rx%3D%221%22%20fill%3D%22%23FFFDF8%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22247%22%20y%3D%2219.9%22%20width%3D%229%22%20height%3D%2236%22%20rx%3D%221%22%20fill%3D%22%23F2B48C%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22256%22%20y%3D%2249.4%22%20width%3D%2229%22%20height%3D%226.5%22%20rx%3D%221%22%20fill%3D%22%239FBFE0%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22257%22%20y%3D%2242.9%22%20width%3D%2227%22%20height%3D%226.5%22%20rx%3D%221%22%20fill%3D%22%23A9D0A0%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22287%22%20y%3D%2218.9%22%20width%3D%2210%22%20height%3D%2237%22%20rx%3D%221%22%20fill%3D%22%23E8A2B4%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Cpath%20d%3D%22M288.5%2023.9%20L295.5%2023.9%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%220.9%22%2F%3E%3Crect%20x%3D%22297%22%20y%3D%2223.9%22%20width%3D%2211%22%20height%3D%2232%22%20rx%3D%221%22%20fill%3D%22%239FBFE0%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22206%22%20y%3D%2273.3%22%20width%3D%2210%22%20height%3D%2241%22%20rx%3D%221%22%20fill%3D%22%23FFFDF8%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22216%22%20y%3D%2279.3%22%20width%3D%227%22%20height%3D%2235%22%20rx%3D%221%22%20fill%3D%22%23C9B6E4%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22223%22%20y%3D%2273.3%22%20width%3D%229%22%20height%3D%2241%22%20rx%3D%221%22%20fill%3D%22%237FA6CF%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22232%22%20y%3D%2282.3%22%20width%3D%229%22%20height%3D%2232%22%20rx%3D%221%22%20fill%3D%22%23F2B48C%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22241%22%20y%3D%2275.3%22%20width%3D%229%22%20height%3D%2239%22%20rx%3D%221%22%20fill%3D%22%23A9D0A0%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22250%22%20y%3D%2284.3%22%20width%3D%228%22%20height%3D%2230%22%20rx%3D%221%22%20fill%3D%22%23F3CF63%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Cpath%20d%3D%22M251.5%2089.3%20L256.5%2089.3%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%220.9%22%2F%3E%3Crect%20x%3D%22258%22%20y%3D%22107.8%22%20width%3D%2231%22%20height%3D%226.5%22%20rx%3D%221%22%20fill%3D%22%23C9B6E4%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22259%22%20y%3D%22101.3%22%20width%3D%2229%22%20height%3D%226.5%22%20rx%3D%221%22%20fill%3D%22%23C9B6E4%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.1%22%2F%3E%3Crect%20x%3D%22204%22%20y%3D%2255.9%22%20width%3D%22144%22%20height%3D%225%22%20fill%3D%22%235C4C72%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.2%22%2F%3E%3Crect%20x%3D%22204%22%20y%3D%22114.3%22%20width%3D%22144%22%20height%3D%225%22%20fill%3D%22%235C4C72%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.2%22%2F%3E%3Crect%20x%3D%22204%22%20y%3D%22172.7%22%20width%3D%22144%22%20height%3D%225%22%20fill%3D%22%235C4C72%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.2%22%2F%3E%3Crect%20x%3D%22204%22%20y%3D%22231.1%22%20width%3D%22144%22%20height%3D%225%22%20fill%3D%22%235C4C72%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.2%22%2F%3E%3Crect%20x%3D%22196%22%20y%3D%22292%22%20width%3D%22160%22%20height%3D%228%22%20fill%3D%22%235C4C72%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.8%22%2F%3E%3Cg%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.3%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M320%2055.9%20L318%2040.9%20L344%2040.9%20L342%2055.9%20Z%22%20fill%3D%22%23C98A6A%22%2F%3E%3Cpath%20d%3D%22M331%2040.9%20Q322%2023.9%20312%2025.9%20M331%2040.9%20Q338%2021.9%20346%2021.9%20M342%2047.9%20Q352%2065.9%20346%2089.9%22%20fill%3D%22none%22%2F%3E%3Cg%20fill%3D%22%236FA77A%22%3E%3Cellipse%20cx%3D%22314%22%20cy%3D%2225.9%22%20rx%3D%226%22%20ry%3D%223.5%22%20transform%3D%22rotate(-20%20314%2025.9)%22%2F%3E%3Cellipse%20cx%3D%22344%22%20cy%3D%2221.9%22%20rx%3D%226%22%20ry%3D%223.5%22%20transform%3D%22rotate(15%20344%2021.9)%22%2F%3E%3Cellipse%20cx%3D%22324%22%20cy%3D%2231.9%22%20rx%3D%225%22%20ry%3D%223%22%20transform%3D%22rotate(-40%20324%2031.9)%22%2F%3E%3Cellipse%20cx%3D%22349%22%20cy%3D%2261.9%22%20rx%3D%225%22%20ry%3D%223%22%20transform%3D%22rotate(60%20349%2061.9)%22%2F%3E%3Cellipse%20cx%3D%22350%22%20cy%3D%2275.9%22%20rx%3D%225%22%20ry%3D%223%22%20transform%3D%22rotate(80%20350%2075.9)%22%2F%3E%3Cellipse%20cx%3D%22346%22%20cy%3D%2289.9%22%20rx%3D%225%22%20ry%3D%223%22%20transform%3D%22rotate(100%20346%2089.9)%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22rotate(-5%20314%2098.3)%22%3E%3Crect%20x%3D%22300%22%20y%3D%2282.3%22%20width%3D%2228%22%20height%3D%2232%22%20rx%3D%221.5%22%20fill%3D%22%23EDE6D6%22%2F%3E%3Crect%20x%3D%22304%22%20y%3D%2286.3%22%20width%3D%2220%22%20height%3D%2224%22%20fill%3D%22%231F2742%22%2F%3E%3Ccircle%20cx%3D%22314%22%20cy%3D%2298.3%22%20r%3D%225%22%20fill%3D%22%23F6E2A0%22%2F%3E%3C%2Fg%3E%3Cpath%20d%3D%22M331%20114.3%20Q330%20102.3%20334%20100.3%20L333%2095.3%20L337%2099.3%20Q339%2098.3%20341%2099.3%20L345%2095.3%20L344%20100.3%20Q348%20102.3%20347%20114.3%20Z%22%20fill%3D%22%23FFFFFF%22%2F%3E%3Ccircle%20cx%3D%22336.5%22%20cy%3D%22105.3%22%20r%3D%220.9%22%20fill%3D%22%233A332E%22%20stroke%3D%22none%22%2F%3E%3Ccircle%20cx%3D%22341.5%22%20cy%3D%22105.3%22%20r%3D%220.9%22%20fill%3D%22%233A332E%22%20stroke%3D%22none%22%2F%3E%3Cpath%20d%3D%22M209%20172.7%20L209%20150.7%20Q209%20146.7%20213%20146.7%20L223%20146.7%20Q227%20146.7%20227%20150.7%20L227%20172.7%20Z%22%20fill%3D%22%23F6E2A0%22%2F%3E%3Crect%20x%3D%22211%22%20y%3D%22141.7%22%20width%3D%2214%22%20height%3D%225%22%20rx%3D%221%22%20fill%3D%22%235C4C72%22%2F%3E%3Cpath%20d%3D%22M218%20155.7%20l2%204%204%200.5%20-3%203%201%204%20-4%20-2%20-4%202%201%20-4%20-3%20-3%204%20-0.5%20Z%22%20fill%3D%22%23F6E2A0%22%20stroke-width%3D%220.8%22%2F%3E%3Crect%20x%3D%22300%22%20y%3D%22205.1%22%20width%3D%2246%22%20height%3D%2226%22%20rx%3D%222%22%20fill%3D%22%238A6A50%22%2F%3E%3Cpath%20d%3D%22M300%20213.1%20L346%20213.1%22%20fill%3D%22none%22%2F%3E%3Crect%20x%3D%22316%22%20y%3D%22218.1%22%20width%3D%2214%22%20height%3D%225%22%20rx%3D%222%22%20fill%3D%22%23EDE6D6%22%2F%3E%3C%2Fg%3E%3Cg%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.4%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%3E%3Cg%20fill%3D%22%236FA77A%22%3E%3Cpath%20d%3D%22M14%20336%20Q-6%20300%202%20268%20Q20%20294%2022%20334%20Z%22%2F%3E%3Cpath%20d%3D%22M18%20336%20Q26%20296%2046%20282%20Q44%20316%2026%20338%20Z%22%2F%3E%3Cpath%20d%3D%22M10%20338%20Q-8%20330%20-12%20310%20Q8%20312%2016%20334%20Z%22%2F%3E%3C%2Fg%3E%3Cpath%20d%3D%22M2%20376%20L6%20336%20L32%20336%20L36%20376%20Z%22%20fill%3D%22%23C98A6A%22%2F%3E%3C%2Fg%3E%3Cpath%20d%3D%22M48%20222%20L84%20214%20L138%20296%20L44%20300%20Z%22%20fill%3D%22%2344507A%22%2F%3E%3Cg%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.8%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%3E%3Crect%20x%3D%2220%22%20y%3D%22304%22%20width%3D%227%22%20height%3D%2268%22%20fill%3D%22%238A6A50%22%2F%3E%3Crect%20x%3D%22100%22%20y%3D%22304%22%20width%3D%227%22%20height%3D%2268%22%20fill%3D%22%238A6A50%22%2F%3E%3Crect%20x%3D%2210%22%20y%3D%22296%22%20width%3D%22108%22%20height%3D%229%22%20rx%3D%222%22%20fill%3D%22%238A6A50%22%2F%3E%3C%2Fg%3E%3Cg%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.2%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%3E%3Crect%20x%3D%2248%22%20y%3D%22289%22%20width%3D%2242%22%20height%3D%227%22%20rx%3D%221%22%20fill%3D%22%239FBFE0%22%2F%3E%3Crect%20x%3D%2251%22%20y%3D%22282%22%20width%3D%2238%22%20height%3D%227%22%20rx%3D%221%22%20fill%3D%22%23E8A2B4%22%2F%3E%3Crect%20x%3D%2247%22%20y%3D%22275%22%20width%3D%2240%22%20height%3D%227%22%20rx%3D%221%22%20fill%3D%22%23A9D0A0%22%2F%3E%3Cpath%20d%3D%22M93%20278%20L93%20294%20Q93%20296%2095%20296%20L106%20296%20Q108%20296%20108%20294%20L108%20278%20Z%22%20fill%3D%22%23FFFDF8%22%2F%3E%3Cpath%20d%3D%22M108%20282%20Q114%20283%20108%20291%22%20fill%3D%22none%22%2F%3E%3C%2Fg%3E%3Cg%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.8%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%3E%3Cellipse%20cx%3D%2232%22%20cy%3D%22294%22%20rx%3D%2213%22%20ry%3D%223.5%22%20fill%3D%22%23F6E2A0%22%2F%3E%3Cpath%20d%3D%22M32%20292%20L28%20236%20L50%20206%22%20fill%3D%22none%22%2F%3E%3Ccircle%20cx%3D%2228%22%20cy%3D%22236%22%20r%3D%222.6%22%20fill%3D%22%23F6E2A0%22%2F%3E%3Cg%20transform%3D%22rotate(32%2064%20212)%22%3E%3Cpath%20d%3D%22M46%20220%20Q46%20198%2064%20198%20Q82%20198%2082%20220%20Z%22%20fill%3D%22%23F6E2A0%22%2F%3E%3Cpath%20d%3D%22M58%20220%20Q64%20226%2070%20220%22%20fill%3D%22%23EDE6D6%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3Cpath%20d%3D%22M112%20376%20C98%20332%20116%20286%20168%20272%20C222%20258%20292%20264%20318%20302%20C336%20330%20332%20362%20320%20376%20Z%22%20fill%3D%22%23A99AD4%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%222.4%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M150%20300%20Q168%20314%20164%20338%20M276%20288%20Q286%20306%20302%20314%20M206%20276%20Q226%20288%20252%20282%20M298%20340%20Q308%20354%20314%20370%22%20fill%3D%22none%22%20stroke%3D%22%237D6EB0%22%20stroke-width%3D%221.6%22%20stroke-linecap%3D%22round%22%2F%3E%3Cg%20transform%3D%22rotate(-8%20264%20296)%22%3E%3Crect%20x%3D%22236%22%20y%3D%22268%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%228%22%20fill%3D%22%23ECE7F7%22%2F%3E%3Cg%20clip-path%3D%22url(%23pil-ex)%22%3E%3Crect%20x%3D%22236%22%20y%3D%22282%22%20width%3D%2214%22%20height%3D%2214%22%20fill%3D%22%23B6AADA%22%2F%3E%3Crect%20x%3D%22236%22%20y%3D%22310%22%20width%3D%2214%22%20height%3D%2214%22%20fill%3D%22%23B6AADA%22%2F%3E%3Crect%20x%3D%22250%22%20y%3D%22268%22%20width%3D%2214%22%20height%3D%2214%22%20fill%3D%22%23B6AADA%22%2F%3E%3Crect%20x%3D%22250%22%20y%3D%22296%22%20width%3D%2214%22%20height%3D%2214%22%20fill%3D%22%23B6AADA%22%2F%3E%3Crect%20x%3D%22264%22%20y%3D%22282%22%20width%3D%2214%22%20height%3D%2214%22%20fill%3D%22%23B6AADA%22%2F%3E%3Crect%20x%3D%22264%22%20y%3D%22310%22%20width%3D%2214%22%20height%3D%2214%22%20fill%3D%22%23B6AADA%22%2F%3E%3Crect%20x%3D%22278%22%20y%3D%22268%22%20width%3D%2214%22%20height%3D%2214%22%20fill%3D%22%23B6AADA%22%2F%3E%3Crect%20x%3D%22278%22%20y%3D%22296%22%20width%3D%2214%22%20height%3D%2214%22%20fill%3D%22%23B6AADA%22%2F%3E%3C%2Fg%3E%3Crect%20x%3D%22236%22%20y%3D%22268%22%20width%3D%2256%22%20height%3D%2256%22%20rx%3D%228%22%20fill%3D%22none%22%20stroke%3D%22%231E1A2C%22%20stroke-width%3D%221.8%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E","exCat":"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%20style%3D%22--fur%3A%23FFFFFF%3B--fur-dark%3A%23D9D3CB%3B--belly%3A%23F6F3EE%3B--face%3A%233A332E%3B--nose%3A%23EFA3A3%3B--ear-in%3A%23F7CFC8%3B--blush%3A%23F6C2BD%3B--zz%3A%23FFF1C9%3B--book%3A%237FA6CF%3B--mug%3A%238DBB8A%22%3E%3Cdefs%3E%3CclipPath%20id%3D%22sil-excat%22%3E%3Cpath%20d%3D%22M100%20190%20C72%20191%2050%20184%2049%20162%20C48%20140%2056%20127%2061%20119%20C46%20108%2041%2086%2049%2068%20C52%2057%2053%2047%2055%2037%20Q57%2026%2066%2031%20C72%2036%2078%2041%2085%2044%20C95%2041%20105%2041%20115%2044%20C122%2041%20128%2036%20134%2031%20Q143%2026%20145%2037%20C147%2047%20148%2057%20151%2068%20C159%2086%20154%20108%20139%20119%20C144%20127%20152%20140%20151%20162%20C150%20184%20128%20191%20100%20190%20Z%22%2F%3E%3C%2FclipPath%3E%3C%2Fdefs%3E%3Cpath%20d%3D%22M146%20172%20C170%20171%20184%20152%20178%20133%20C175%20123%20165%20123%20166%20132%20C170%20147%20161%20159%20145%20160%20Z%22%20fill%3D%22var(--fur)%22%20stroke%3D%22%233A332E%22%20stroke-width%3D%222.4%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M168%20127%20Q172%20128%20174%20132%22%20fill%3D%22none%22%20stroke%3D%22var(--fur-dark)%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M100%20190%20C72%20191%2050%20184%2049%20162%20C48%20140%2056%20127%2061%20119%20C46%20108%2041%2086%2049%2068%20C52%2057%2053%2047%2055%2037%20Q57%2026%2066%2031%20C72%2036%2078%2041%2085%2044%20C95%2041%20105%2041%20115%2044%20C122%2041%20128%2036%20134%2031%20Q143%2026%20145%2037%20C147%2047%20148%2057%20151%2068%20C159%2086%20154%20108%20139%20119%20C144%20127%20152%20140%20151%20162%20C150%20184%20128%20191%20100%20190%20Z%22%20fill%3D%22var(--fur)%22%2F%3E%0A%20%20%20%20%3Cellipse%20cx%3D%22100%22%20cy%3D%22160%22%20rx%3D%2227%22%20ry%3D%2224%22%20fill%3D%22var(--belly)%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M60%2042%20Q62%2034%2068%2038%20Q74%2042%2077%2045%20Q67%2047%2060%2042%20Z%22%20fill%3D%22var(--ear-in)%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M140%2042%20Q138%2034%20132%2038%20Q126%2042%20123%2045%20Q133%2047%20140%2042%20Z%22%20fill%3D%22var(--ear-in)%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M94%2050%20Q96%2056%2095%2061%20M100%2048%20L100%2059%20M106%2050%20Q104%2056%20105%2061%22%20fill%3D%22none%22%20stroke%3D%22var(--fur-dark)%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%3Cellipse%20cx%3D%2273%22%20cy%3D%2297%22%20rx%3D%226.5%22%20ry%3D%223.6%22%20fill%3D%22var(--blush)%22%2F%3E%0A%20%20%20%20%3Cellipse%20cx%3D%22127%22%20cy%3D%2297%22%20rx%3D%226.5%22%20ry%3D%223.6%22%20fill%3D%22var(--blush)%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M76%20121%20Q100%20130%20124%20121%22%20fill%3D%22none%22%20stroke%3D%22%233A332E%22%20stroke-width%3D%221.8%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%20stroke-opacity%3D%220.55%22%2F%3E%3Cpath%20d%3D%22M100%20190%20C72%20191%2050%20184%2049%20162%20C48%20140%2056%20127%2061%20119%20C46%20108%2041%2086%2049%2068%20C52%2057%2053%2047%2055%2037%20Q57%2026%2066%2031%20C72%2036%2078%2041%2085%2044%20C95%2041%20105%2041%20115%2044%20C122%2041%20128%2036%20134%2031%20Q143%2026%20145%2037%20C147%2047%20148%2057%20151%2068%20C159%2086%20154%20108%20139%20119%20C144%20127%20152%20140%20151%20162%20C150%20184%20128%20191%20100%20190%20Z%22%20fill%3D%22none%22%20stroke%3D%22%233A332E%22%20stroke-width%3D%222.4%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M60%2090%20L37%2086%20M60%2096%20L38%2098%20M140%2090%20L163%2086%20M140%2096%20L162%2098%22%20fill%3D%22none%22%20stroke%3D%22var(--face)%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M77%20190%20Q77%20179%2086%20179%20Q95%20179%2095%20190%22%20fill%3D%22var(--fur)%22%20stroke%3D%22%233A332E%22%20stroke-width%3D%222.4%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M105%20190%20Q105%20179%20114%20179%20Q123%20179%20123%20190%22%20fill%3D%22var(--fur)%22%20stroke%3D%22%233A332E%22%20stroke-width%3D%222.4%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M86%20184%20L86%20188%20M114%20184%20L114%20188%22%20stroke%3D%22%233A332E%22%20stroke-width%3D%221.8%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%3Cellipse%20cx%3D%2285%22%20cy%3D%2289%22%20rx%3D%223%22%20ry%3D%223.4%22%20fill%3D%22var(--face)%22%2F%3E%0A%20%20%20%20%20%20%3Cellipse%20cx%3D%22115%22%20cy%3D%2289%22%20rx%3D%223%22%20ry%3D%223.4%22%20fill%3D%22var(--face)%22%2F%3E%3Cellipse%20cx%3D%22100%22%20cy%3D%2292.5%22%20rx%3D%222.8%22%20ry%3D%221.9%22%20fill%3D%22var(--nose)%22%2F%3E%0A%20%20%20%20%20%20%3Cpath%20d%3D%22M97%2097.5%20Q100%2099.5%20103%2097.5%22%20fill%3D%22none%22%20stroke%3D%22var(--face)%22%20stroke-width%3D%221.9%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M61%20160%20Q81%20154%20100%20163%20Q119%20154%20139%20160%20L139%20165%20Q119%20159%20100%20168%20Q81%20159%2061%20165%20Z%22%20fill%3D%22var(--book)%22%20stroke%3D%22%233A332E%22%20stroke-width%3D%222.4%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%3Cpath%20d%3D%22M64%20129%20Q83%20123%20100%20131%20Q117%20123%20136%20129%20L136%20160%20Q117%20154%20100%20162%20Q83%20154%2064%20160%20Z%22%20fill%3D%22%23FFFDF8%22%20stroke%3D%22%233A332E%22%20stroke-width%3D%222.4%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%3Cpath%20d%3D%22M100%20131%20L100%20162%22%20stroke%3D%22%233A332E%22%20stroke-width%3D%221.8%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%3Cpath%20d%3D%22M72%20137%20Q82%20134%2092%20138%20M72%20144%20Q82%20141%2092%20145%20M72%20151%20Q80%20148%2088%20151%20M108%20138%20Q118%20134%20128%20137%20M108%20145%20Q118%20141%20128%20144%20M112%20151%20Q120%20148%20128%20151%22%20fill%3D%22none%22%20stroke%3D%22%23B8B0A6%22%20stroke-width%3D%221.6%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%3Cpath%20d%3D%22M55%20149%20Q54%20136%2063%20136%20Q72%20136%2071%20149%20Q63%20154%2055%20149%20Z%22%20fill%3D%22var(--fur)%22%20stroke%3D%22%233A332E%22%20stroke-width%3D%222.4%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M129%20149%20Q128%20136%20137%20136%20Q146%20136%20145%20149%20Q137%20154%20129%20149%20Z%22%20fill%3D%22var(--fur)%22%20stroke%3D%22%233A332E%22%20stroke-width%3D%222.4%22%20stroke-linejoin%3D%22round%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"};
+const $ = id => document.getElementById(id);
+const P = DATA.P;
+
+// ---------- 프롬프트 ----------
+$('pStyle').textContent = P.STYLE;
+$('pNcLock').textContent = P.NC_LOCK; $('pNcFix').textContent = P.NC_FIX;
+chips($('cNc'), P.NC_THEMES, t => { $('pNcTheme').textContent = P.NC_THEME.replace('{THEME}', t.text); }, 0);
+$('pCat').textContent = P.CAT;
+$('pMatch').textContent = P.MATCH;
+$('pRestyle').textContent = P.RESTYLE;
+P.TIPS.forEach(t => { const li = document.createElement('li'); li.textContent = t; $('tips').appendChild(li); });
+function chips(box, items, onPick, start) {
+  items.forEach((it, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = it.name; b.setAttribute('aria-pressed', String(i === start));
+    b.addEventListener('click', () => { box.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', 'false')); b.setAttribute('aria-pressed', 'true'); onPick(it); });
+    box.appendChild(b);
+  });
+  onPick(items[start]);
+}
+chips($('cTheme'), P.THEMES, t => { $('pBg').textContent = P.BG.replace('{THEME}', t.text); }, 0);
+chips($('cPose'), P.POSES, p => { $('pPose').textContent = P.POSE.replace('{POSE}', p.text); }, 0);
+chips($('cOutfit'), P.OUTFITS, o => { $('pOutfit').textContent = P.OUTFIT.replace('{ITEM}', o.text); }, 0);
+document.querySelectorAll('button.copy[data-copy]').forEach(b => b.addEventListener('click', () => {
+  const src = $(b.dataset.copy), text = src.value !== undefined && src.tagName === 'TEXTAREA' ? src.value : src.textContent;
+  const msg = b.parentElement.querySelector('.msg');
+  const fallback = () => { const r = document.createRange(); r.selectNodeContents(src); const s = getSelection(); s.removeAllRanges(); s.addRange(r); if (src.select) src.select(); msg.textContent = '선택해 두었어요. 직접 복사해 주세요.'; };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => { msg.textContent = '복사했어요.'; }, fallback); else fallback();
+}));
+
+// ---------- 작업대 ----------
+const bgs = [{ name: '예시-방', url: DATA.exBg, example: true }];
+const cats = [{ name: '예시-고양이', url: DATA.exCat, example: true }];
+let curBg = 0, curCat = 0, view = 'orig';
+let align = {};
+try { align = JSON.parse(localStorage.getItem('nyang-align') || '{}') || {}; } catch (e) { align = {}; }
+const def = { x: 60, y: 79, h: 30, flip: false };
+const A = name => (align[name] = align[name] || Object.assign({}, def));
+const okey = (c, bg) => c.name + '@' + (bg ? bg.name : '');
+// 이 배경 전용 값이 있으면 그것, 없으면 고양이 공통 값
+const AA = (c, bg = bgs[curBg]) => align[okey(c, bg)] || A(c.name);
+const HDEF = { on: false, tint: 30, light: 'left', lightAmt: 20, line: 50, shadow: 60 };
+let H = Object.assign({}, HDEF);
+
+// 1) 단색 배경 빼기 + 고양이만 남게 잘라내기. 결과(캔버스)는 (색, 허용 범위)별로 저장해 두고 다시 쓴다.
+function keyed(c) {
+  const on = $('keyOn').checked, col = $('keyColor').value, tol = +$('keyTol').value;
+  const k = (on ? col + tol : 'off');
+  if (c.cache && c.cache.k === k) return Promise.resolve(c.cache);
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas'); cv.width = img.naturalWidth || 600; cv.height = img.naturalHeight || 600;
+      const g = cv.getContext('2d'); g.drawImage(img, 0, 0, cv.width, cv.height);
+      if (c.example) { c.cache = { k, canvas: null, url: c.url, ratio: 1 }; res(c.cache); return; }
+      const d = g.getImageData(0, 0, cv.width, cv.height), p = d.data, W = cv.width, Hh = cv.height;
+      const kr = parseInt(col.slice(1, 3), 16), kg = parseInt(col.slice(3, 5), 16), kb = parseInt(col.slice(5, 7), 16);
+      let x0 = W, y0 = Hh, x1 = -1, y1 = -1;
+      for (let i = 0; i < p.length; i += 4) {
+        if (on) {
+          const dist = Math.sqrt((p[i] - kr) ** 2 + (p[i + 1] - kg) ** 2 + (p[i + 2] - kb) ** 2);
+          if (dist < tol) p[i + 3] = 0;
+          else if (dist < tol * 1.6) {
+            const a = (dist - tol) / (tol * 0.6); p[i + 3] = Math.round(p[i + 3] * a);
+            const m = Math.min(p[i], p[i + 2]); if (p[i + 1] < m) { p[i] = Math.round(p[i] * a + p[i + 1] * (1 - a)); p[i + 2] = Math.round(p[i + 2] * a + p[i + 1] * (1 - a)); }
+          }
+        }
+        if (p[i + 3] > 10) { const q = i / 4, x = q % W, y = (q / W) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      }
+      g.putImageData(d, 0, 0);
+      if (x1 < 0) { x0 = 0; y0 = 0; x1 = W - 1; y1 = Hh - 1; }
+      const out = document.createElement('canvas'); out.width = x1 - x0 + 1; out.height = y1 - y0 + 1;
+      out.getContext('2d').drawImage(cv, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+      out.toBlob(b => { const url = URL.createObjectURL(b); if (c.cache && c.cache.url && c.cache.canvas) URL.revokeObjectURL(c.cache.url); c.cache = { k, canvas: out, url, ratio: out.width / out.height }; res(c.cache); });
+    };
+    img.onerror = () => res({ k, canvas: null, url: c.url, ratio: 1 });
+    img.src = c.url;
+  });
+}
+
+// 2) 배경 픽셀 (어울리게 하기에서 주변 색을 읽는 데 씀)
+let bgPix = null, bgPixUrl = null;
+function loadBgPixels(url) {
+  if (bgPixUrl === url) return Promise.resolve(bgPix);
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      try {
+        const W = Math.min(im.naturalWidth, 600), s = W / im.naturalWidth, cv = document.createElement('canvas');
+        cv.width = W; cv.height = Math.round(im.naturalHeight * s);
+        const g = cv.getContext('2d'); g.drawImage(im, 0, 0, cv.width, cv.height);
+        bgPix = { w: cv.width, h: cv.height, data: g.getImageData(0, 0, cv.width, cv.height).data };
+      } catch (e) { bgPix = null; }
+      bgPixUrl = url; res(bgPix);
+    };
+    im.onerror = () => { bgPix = null; bgPixUrl = url; res(null); };
+    im.src = url;
+  });
+}
+function sampleBg(box) {
+  if (!bgPix) return null;
+  const { w, h, data } = bgPix, r = w / h, pr = 2 / 3;
+  const mx = v => r > pr ? (v / 100 * (pr / r) + (1 - pr / r) / 2) * w : v / 100 * w;
+  const my = v => r > pr ? v / 100 * h : (v / 100 * (r / pr) + (1 - r / pr) / 2) * h;
+  const x0 = Math.max(0, Math.floor(mx(box.l))), x1 = Math.min(w - 1, Math.ceil(mx(box.r)));
+  const y0 = Math.max(0, Math.floor(my(box.t))), y1 = Math.min(h - 1, Math.ceil(my(box.b)));
+  const sum = [0, 0, 0], lum = []; let n = 0;
+  for (let y = y0; y <= y1; y += 2) for (let x = x0; x <= x1; x += 2) {
+    const i = (y * w + x) * 4; sum[0] += data[i]; sum[1] += data[i + 1]; sum[2] += data[i + 2]; n++;
+    lum.push([0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2], i]);
+  }
+  if (!n) return null;
+  lum.sort((a, b) => a[0] - b[0]);
+  const k = Math.max(1, Math.floor(lum.length * 0.08)), dark = [0, 0, 0];
+  for (let j = 0; j < k; j++) { const i = lum[j][1]; dark[0] += data[i]; dark[1] += data[i + 1]; dark[2] += data[i + 2]; }
+  return { amb: sum.map(v => v / n), dark: dark.map(v => v / k) };
+}
+function catBox(a, ratio) {
+  const wPct = a.h * ratio * 1.5;   // 화면 2:3: 높이 1% = 가로 1.5%
+  return { l: a.x - wPct / 2, r: a.x + wPct / 2, t: a.y - a.h, b: a.y, wPct };
+}
+
+// 3) 배경에 어울리게: 주변 색으로 물들이기, 한쪽에서 오는 빛, 선 색을 주변 어두운 색으로
+function harmonize(c, kc, smp) {
+  if (!H.on || !kc.canvas || !smp) return Promise.resolve(kc.url);
+  const key = JSON.stringify([kc.k, H, smp.amb.map(Math.round), smp.dark.map(Math.round)]);
+  if (c.hcache && c.hcache.key === key) return Promise.resolve(c.hcache.url);
+  const src = kc.canvas, cv = document.createElement('canvas'); cv.width = src.width; cv.height = src.height;
+  const g = cv.getContext('2d'); g.drawImage(src, 0, 0);
+  const d = g.getImageData(0, 0, cv.width, cv.height), p = d.data, W = cv.width;
+  const m = Math.max(...smp.amb, 1), an = smp.amb.map(v => v / m), dk = smp.dark;
+  const t = H.tint / 100, la = H.lightAmt / 100, ln = H.line / 100;
+  for (let i = 0; i < p.length; i += 4) {
+    if (p[i + 3] === 0) continue;
+    const xf = ((i / 4) % W) / W;
+    const shade = H.light === 'left' ? 1 + la * 0.3 - la * xf : H.light === 'right' ? 1 + la * 0.3 - la * (1 - xf) : 1;
+    const L = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+    const kk = L < 110 ? (110 - L) / 110 * ln : 0;
+    for (let ch = 0; ch < 3; ch++) {
+      let v = p[i + ch] * (1 - t) + p[i + ch] * an[ch] * t;
+      v *= shade;
+      if (kk) v = v * (1 - kk) + dk[ch] * kk;
+      p[i + ch] = v > 255 ? 255 : v < 0 ? 0 : v;
+    }
+  }
+  g.putImageData(d, 0, 0);
+  return new Promise(res => cv.toBlob(b => { const url = URL.createObjectURL(b); if (c.hcache) URL.revokeObjectURL(c.hcache.url); c.hcache = { key, url }; res(url); }));
+}
+
+function list(box, arr, cur, pick) {
+  const wasOpen = box.querySelector('details.archive') && box.querySelector('details.archive').open;
+  box.innerHTML = '';
+  const mk = (it, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = it.name.replace(/.png$/i, ''); b.title = it.name;
+    if (it.archived) b.className = 'archived';
+    b.setAttribute('aria-pressed', String(i === cur)); b.addEventListener('click', () => pick(i)); return b;
+  };
+  arr.forEach((it, i) => { if (!it.archived) box.appendChild(mk(it, i)); });
+  const arc = arr.map((it, i) => [it, i]).filter(([it]) => it.archived);
+  if (arc.length) {
+    const d = document.createElement('details'); d.className = 'archive'; d.open = wasOpen || (arr[cur] && arr[cur].archived);
+    const sm = document.createElement('summary'); sm.textContent = '보관함 (' + arc.length + ')'; d.appendChild(sm);
+    const inner = document.createElement('div'); inner.className = 'list'; arc.forEach(([it, i]) => inner.appendChild(mk(it, i))); d.appendChild(inner);
+    box.appendChild(d);
+  }
+}
+function place(img, c) {
+  const a = AA(c);
+  img.style.left = a.x + '%'; img.style.height = a.h + '%'; img.style.top = (a.y - a.h) + '%';
+  img.style.transform = 'translateX(-50%)' + (a.flip ? ' scaleX(-1)' : '');
+}
+let renderSeq = 0;
+async function render() {
+  const seq = ++renderSeq;
+  list($('lBg'), bgs, curBg, i => { curBg = i; render(); scheduleSave(); });
+  list($('lCat'), cats, curCat, i => { curCat = i; render(); scheduleSave(); });
+  const sel = $('cmpSel'), keep = sel.value; sel.innerHTML = '<option value="">없음</option>';
+  cats.forEach((c, i) => { if (i !== curCat) { const o = document.createElement('option'); o.value = String(i); o.textContent = c.name; sel.appendChild(o); } });
+  sel.value = [...sel.options].some(o => o.value === keep) ? keep : '';
+  const bgUrl = bgs[curBg].url; $('bgImg').src = bgUrl;
+  const c = cats[curCat], a = AA(c);
+  const kc = await keyed(c);
+  const box = catBox(a, kc.ratio);
+  if (!bgs[curBg].example) await loadBgPixels(bgUrl);
+  const smp = bgs[curBg].example ? null : sampleBg({ l: box.l - 4, r: box.r + 4, t: box.t, b: Math.min(100, box.b + 4) });
+  const url = await harmonize(c, kc, smp);
+  if (seq !== renderSeq) return;
+  $('catImg').src = url; place($('catImg'), c);
+  // 바닥 그림자
+  const sh = $('shadow');
+  if (H.on && H.shadow > 0 && smp) {
+    const dk = smp.dark.map(v => Math.round(v * 0.55));
+    sh.hidden = false;
+    sh.style.left = a.x + '%'; sh.style.width = (box.wPct * 0.62) + '%'; sh.style.height = (a.h * 0.07) + '%';
+    sh.style.top = (a.y - a.h * 0.05) + '%'; sh.style.background = 'rgb(' + dk.join(',') + ')'; sh.style.opacity = (H.shadow / 100 * 0.75).toFixed(2);
+  } else sh.hidden = true;
+  const ci = sel.value === '' ? null : cats[+sel.value];
+  $('cmpImg').hidden = !ci; if (ci) { const kk = await keyed(ci); $('cmpImg').src = kk.url; place($('cmpImg'), ci); }
+  $('sX').value = a.x; $('sY').value = a.y; $('sH').value = a.h; $('flip').checked = a.flip;
+  $('perBg').checked = !!align[okey(c, bgs[curBg])]; showReadout();
+  $('arcBg').textContent = bgs[curBg].archived ? '선택한 배경 보관함에서 꺼내기' : '선택한 배경 보관함으로';
+  $('arcCat').textContent = cats[curCat].archived ? '선택한 고양이 보관함에서 꺼내기' : '선택한 고양이 보관함으로';
+  $('arcBg').hidden = !bgs[curBg].docId; $('arcCat').hidden = !cats[curCat].docId;
+  $('vX').textContent = a.x; $('vY').textContent = a.y; $('vH').textContent = a.h; $('vTol').textContent = $('keyTol').value;
+  $('hOn').checked = H.on; $('hTint').value = H.tint; $('hLightAmt').value = H.lightAmt; $('hLine').value = H.line; $('hShadow').value = H.shadow; $('hLight').value = H.light;
+  $('vTint').textContent = H.tint; $('vLightAmt').textContent = H.lightAmt; $('vLine').textContent = H.line; $('vShadow').textContent = H.shadow;
+  $('card').hidden = !$('showCard').checked; $('quote').hidden = !$('showQuote').checked;
+  $('phone').classList.toggle('sim-color', view === 'color'); $('phone').classList.toggle('sim-mono', view === 'mono');
+  $('exNote').hidden = !(bgs[curBg].example || c.example);
+  const outObj = {}; Object.keys(align).forEach(k => { if (!k.startsWith('예시')) outObj[k] = align[k]; });
+  $('out').value = JSON.stringify({ anchor: '고양이만 잘라낸 그림 기준: 가로 중심 x%, 발끝 y%, 키 h% (화면 2:3). "고양이@배경" 키는 그 배경 전용 값', harmony: H, sprites: outObj }, null, 2);
+  try { localStorage.setItem('nyang-align', JSON.stringify(align)); } catch (e) {}
+}
+[['hTint', 'tint'], ['hLightAmt', 'lightAmt'], ['hLine', 'line'], ['hShadow', 'shadow']].forEach(([id, f]) => $(id).addEventListener('input', e => { H[f] = +e.target.value; render(); }));
+$('hLight').addEventListener('change', e => { H.light = e.target.value; render(); });
+$('hOn').addEventListener('change', e => { H.on = e.target.checked; render(); });
+['hTint', 'hLightAmt', 'hLine', 'hShadow', 'hLight', 'hOn'].forEach(id => $(id).addEventListener('change', () => scheduleSave()));
+['sX', 'sY', 'sH'].forEach((id, j) => $(id).addEventListener('input', e => { const a = AA(cats[curCat]); a[['x', 'y', 'h'][j]] = +e.target.value; quick(); clearTimeout(nudge.t); nudge.t = setTimeout(render, 250); }));
+$('flip').addEventListener('change', e => { AA(cats[curCat]).flip = e.target.checked; render(); });
+
+// ---------- 고양이 옮기기: 끌기, 방향 버튼, 화살표 키 ----------
+const r1 = v => Math.round(v * 100) / 100, q4 = v => Math.round(v * 4) / 4;
+function showReadout() { const a = AA(cats[curCat]); $('readout').textContent = '가로 ' + r1(a.x) + ' · 발끝 ' + r1(a.y) + ' · 키 ' + r1(a.h) + (align[okey(cats[curCat], bgs[curBg])] ? ' · 이 배경 전용' : ''); }
+function quick() { const c = cats[curCat], a = AA(c); place($('catImg'), c); $('sX').value = a.x; $('sY').value = a.y; $('sH').value = a.h; $('vX').textContent = r1(a.x); $('vY').textContent = r1(a.y); $('vH').textContent = r1(a.h); showReadout(); const sh = $('shadow'); if (!sh.hidden) { sh.style.left = a.x + '%'; sh.style.top = (a.y - a.h * 0.05) + '%'; } }
+let step = 0.5;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+function nudge(dx, dy, dh) {
+  const a = AA(cats[curCat]);
+  a.x = r1(clamp(a.x + dx * step, 0, 100)); a.y = r1(clamp(a.y + dy * step, 20, 110)); a.h = r1(clamp(a.h + dh * step, 5, 95));
+  quick(); scheduleSave(); clearTimeout(nudge.t); nudge.t = setTimeout(render, 250);
+}
+function holdable(btn, fn) {
+  let t1 = null, t2 = null, fired = false;
+  const stop = () => { clearTimeout(t1); clearInterval(t2); t1 = t2 = null; };
+  btn.addEventListener('pointerdown', () => { fired = false; stop(); t1 = setTimeout(() => { fired = true; fn(); t2 = setInterval(fn, 90); }, 420); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
+  btn.addEventListener('click', () => { if (!fired) fn(); fired = false; });
+}
+document.querySelectorAll('.mvrow .fine').forEach(b => { const [f, d] = b.dataset.f.split(','); holdable(b, () => nudge(f === 'x' ? +d : 0, f === 'y' ? +d : 0, f === 'h' ? +d : 0)); });
+let tapMode = false;
+$('mvReset').addEventListener('click', () => { const a = AA(cats[curCat]); Object.assign(a, { x: def.x, y: def.y, h: def.h }); quick(); render(); scheduleSave(); });
+$('perBg').addEventListener('change', e => {
+  const c = cats[curCat], k = okey(c, bgs[curBg]);
+  if (e.target.checked) align[k] = Object.assign({}, A(c.name)); else delete align[k];
+  render(); scheduleSave();
+});
+$('phone').addEventListener('keydown', e => {
+  const m = { ArrowLeft: [-1, 0, 0], ArrowRight: [1, 0, 0], ArrowUp: [0, -1, 0], ArrowDown: [0, 1, 0], '+': [0, 0, 1], '=': [0, 0, 1], '-': [0, 0, -1] }[e.key];
+  if (m) { e.preventDefault(); nudge(...m); }
+});
+(() => {
+  const img = $('catImg'), ph = $('phone'); let drag = null;
+  img.draggable = false; img.addEventListener('dragstart', e => e.preventDefault());
+  img.addEventListener('pointerdown', e => {
+    const r = ph.getBoundingClientRect(), a = AA(cats[curCat]);
+    if (tapMode) return;
+    drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, x: a.x, y: a.y, w: r.width, h: r.height, moved: false };
+    img.setPointerCapture(e.pointerId); img.classList.add('dragging'); e.preventDefault();
+  });
+  img.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const a = AA(cats[curCat]);
+    a.x = q4(clamp(drag.x + (e.clientX - drag.sx) / drag.w * 100, 0, 100));
+    a.y = q4(clamp(drag.y + (e.clientY - drag.sy) / drag.h * 100, 20, 110));
+    drag.moved = true; quick();
+  });
+  const end = e => { if (!drag || e.pointerId !== drag.id) return; const moved = drag.moved; drag = null; img.classList.remove('dragging'); if (moved) { render(); scheduleSave(); } };
+  img.addEventListener('touchstart', e => { if (!tapMode) e.preventDefault(); }, { passive: false });
+  img.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+  img.addEventListener('pointerup', end); img.addEventListener('pointercancel', end);
+})();
+
+// ---------- 보관함 ----------
+async function toggleArchive(arr, idx) {
+  const it = arr[idx]; if (!it || !it.docId || !db) return;
+  const next = !it.archived;
+  try { await db.doc('images/' + it.docId).update({ archived: next }); it.archived = next; render(); setSaveNote(next ? '보관함으로 옮겼어요.' : '보관함에서 꺼냈어요.'); }
+  catch (e) { setSaveNote('보관함 정리를 하지 못했어요 (' + (e && e.code || '오류') + ')'); }
+}
+$('arcBg').addEventListener('click', () => toggleArchive(bgs, curBg));
+$('arcCat').addEventListener('click', () => toggleArchive(cats, curCat));
+['keyOn', 'keyColor', 'keyTol', 'showCard', 'showQuote', 'cmpSel'].forEach(id => $(id).addEventListener('input', render));
+chips($('cView'), [{ id: 'orig', name: '원본 색' }, { id: 'color', name: '컬러 e잉크 흉내' }, { id: 'mono', name: '흑백' }], v => { view = v.id; render(); }, 0);
+// ---------- 저장 (assets + db): 올린 그림과 맞춘 값이 남고, Claude도 볼 수 있다 ----------
+let store = null, db = null, saveTimer = null;
+function setSaveNote(t) { $('saveNote').textContent = t; }
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    if (!db) return;
+    try {
+      const sprites = {}; Object.keys(align).forEach(k => { if (!k.startsWith('예시')) sprites[k] = align[k]; });
+      await db.doc('settings/bench').set({ sprites, current: { bg: bgs[curBg] && bgs[curBg].name, cat: cats[curCat] && cats[curCat].name },
+        key: { on: $('keyOn').checked, color: $('keyColor').value, tol: +$('keyTol').value }, harmony: H, savedAt: Date.now() });
+      setSaveNote('저장됨');
+    } catch (e) { setSaveNote('맞춘 값을 저장하지 못했어요 (' + (e && e.code || '오류') + ')'); }
+  }, 900);
+}
+async function addFiles(files, arr, kind, setCur) {
+  for (const f of [...files]) {
+    let item = { name: f.name, url: URL.createObjectURL(f) };
+    if (store && db) {
+      try {
+        setSaveNote(f.name + ' 올리는 중…');
+        const r = await store.upload(f);
+        const ref = await db.collection('images').add({ name: f.name, kind, assetId: r.id, createdAt: Date.now() });
+        item = { name: f.name, url: r.url, assetId: r.id, docId: ref.id };
+        setSaveNote('저장됨');
+      } catch (e) {
+        setSaveNote(f.name + '을(를) 저장하지 못했어요 (' + (e && e.code || '오류') + '). 이 화면에서만 보입니다.');
+      }
+    }
+    if (!arr.some(x => x.assetId && x.assetId === item.assetId)) arr.push(item);
+  }
+  const firstReal = arr.findIndex(x => !x.example);
+  if (arr[0] && arr[0].example && firstReal > 0) arr.shift();
+  setCur(arr.length - 1); render(); scheduleSave();
+}
+$('fBg').addEventListener('change', e => addFiles(e.target.files, bgs, 'bg', i => { curBg = i; }));
+$('fCat').addEventListener('change', e => addFiles(e.target.files, cats, 'cat', i => { curCat = i; }));
+['sX', 'sY', 'sH', 'flip', 'keyOn', 'keyColor', 'keyTol'].forEach(id => $(id).addEventListener('change', scheduleSave));
+
+(async () => {
+  try { store = await claude.use('assets'); db = await claude.use('db'); } catch (e) { store = null; db = null; }
+  if (!store || !db) { setSaveNote('이 화면에서는 올린 그림이 저장되지 않아요. 그림은 이 브라우저에서만 보입니다.'); return; }
+  setSaveNote('올린 그림은 이 작업대에 저장되고, Claude가 볼 수 있어요.');
+  try {
+    const st = await db.doc('settings/bench').get();
+    // 저장소가 돌려주는 데이터는 얼어 있어서(수정 불가) 복사본을 만들어 써야 값이 바뀐다
+    const saved = st.exists ? JSON.parse(JSON.stringify(st.data())) : null;
+    if (saved && saved.sprites) Object.assign(align, saved.sprites);
+    if (saved && saved.harmony) H = Object.assign({}, HDEF, saved.harmony);
+    if (saved && saved.key) { $('keyOn').checked = !!saved.key.on; $('keyColor').value = saved.key.color || '#ff00ff'; $('keyTol').value = saved.key.tol || 80; }
+    const q = await db.collection('images').orderBy('createdAt').get();
+    q.docs.forEach(d => {
+      const v = d.data(); const arr = v.kind === 'bg' ? bgs : cats;
+      if (!arr.some(x => x.assetId === v.assetId)) arr.push({ name: v.name, url: '/_blob/' + v.assetId, assetId: v.assetId, docId: d.id, archived: !!v.archived });
+    });
+    [bgs, cats].forEach(arr => { if (arr.length > 1 && arr[0].example) arr.shift(); });
+    if (saved && saved.current) {
+      const bi = bgs.findIndex(x => x.name === saved.current.bg), ci = cats.findIndex(x => x.name === saved.current.cat);
+      if (bi >= 0) curBg = bi; if (ci >= 0) curCat = ci;
+    } else { curBg = bgs.length - 1; curCat = cats.length - 1; }
+    if (bgs[curBg] && bgs[curBg].archived) { const j = bgs.findIndex(x => !x.archived); if (j >= 0) curBg = j; }
+    render();
+  } catch (e) { setSaveNote('저장된 그림을 불러오지 못했어요 (' + (e && e.code || '오류') + ').'); }
+})();
+render();
+</script>

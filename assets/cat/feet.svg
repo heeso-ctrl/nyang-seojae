@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" style="--fur:#FFFFFF;--fur-dark:#D9D3CB;--belly:#F6F3EE;--face:#3A332E;--nose:#EFA3A3;--ear-in:#F7CFC8;--blush:#F6C2BD;--zz:#3A332E;--book:#7FA6CF;--mug:#8DBB8A"><path d="M77 190 Q77 179 86 179 Q95 179 95 190" fill="var(--fur)" stroke="#3A332E" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M105 190 Q105 179 114 179 Q123 179 123 190" fill="var(--fur)" stroke="#3A332E" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M86 184 L86 188 M114 184 L114 188" stroke="#3A332E" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>

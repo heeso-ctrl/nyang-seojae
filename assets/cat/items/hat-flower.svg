@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" style="--fur:#FFFFFF;--fur-dark:#D9D3CB;--belly:#F6F3EE;--face:#3A332E;--nose:#EFA3A3;--ear-in:#F7CFC8;--blush:#F6C2BD;--zz:#3A332E;--book:#7FA6CF;--mug:#8DBB8A">
+      <g stroke="#3A332E" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="#F6B3C8">
+        <circle cx="127" cy="40" r="5.2"/><circle cx="135" cy="45" r="5.2"/><circle cx="132" cy="54" r="5.2"/>
+        <circle cx="122" cy="54" r="5.2"/><circle cx="119" cy="45" r="5.2"/>
+      </g><circle cx="127" cy="48" r="3.8" fill="#F3CF63" stroke="#3A332E" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>

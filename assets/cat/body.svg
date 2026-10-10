@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" style="--fur:#FFFFFF;--fur-dark:#D9D3CB;--belly:#F6F3EE;--face:#3A332E;--nose:#EFA3A3;--ear-in:#F7CFC8;--blush:#F6C2BD;--zz:#3A332E;--book:#7FA6CF;--mug:#8DBB8A"><path d="M100 190 C72 191 50 184 49 162 C48 140 56 127 61 119 C46 108 41 86 49 68 C52 57 53 47 55 37 Q57 26 66 31 C72 36 78 41 85 44 C95 41 105 41 115 44 C122 41 128 36 134 31 Q143 26 145 37 C147 47 148 57 151 68 C159 86 154 108 139 119 C144 127 152 140 151 162 C150 184 128 191 100 190 Z" fill="var(--fur)"/>
+    <ellipse cx="100" cy="160" rx="27" ry="24" fill="var(--belly)"/>
+    <path d="M60 42 Q62 34 68 38 Q74 42 77 45 Q67 47 60 42 Z" fill="var(--ear-in)"/>
+    <path d="M140 42 Q138 34 132 38 Q126 42 123 45 Q133 47 140 42 Z" fill="var(--ear-in)"/>
+    <path d="M94 50 Q96 56 95 61 M100 48 L100 59 M106 50 Q104 56 105 61" fill="none" stroke="var(--fur-dark)" stroke-width="2.6" stroke-linecap="round"/>
+    <ellipse cx="73" cy="97" rx="6.5" ry="3.6" fill="var(--blush)"/>
+    <ellipse cx="127" cy="97" rx="6.5" ry="3.6" fill="var(--blush)"/>
+    <path d="M76 121 Q100 130 124 121" fill="none" stroke="#3A332E" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-opacity="0.55"/></svg>

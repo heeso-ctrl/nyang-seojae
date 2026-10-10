@@ -1,0 +1,11 @@
+{
+  "default": "moon",
+  "themes": [
+    { "id": "moon",   "name": "달빛 서재",   "file": "themes/moon/bg.webp",   "night": true  },
+    { "id": "sea",    "name": "노을 바닷가", "file": "themes/sea/bg.webp",    "night": false },
+    { "id": "forest", "name": "숲속 산장",   "file": "themes/forest/bg.webp", "night": false },
+    { "id": "rain",   "name": "비 오는 저녁", "file": "themes/rain/bg.webp",   "night": true  },
+    { "id": "attic",  "name": "다락방",     "file": "themes/attic/bg.webp",  "night": true  }
+  ],
+  "quote": { "paper": "#FFFDF6", "ink": "#3A332E", "border": "#3A332E" }
+}

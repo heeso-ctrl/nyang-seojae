@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" style="--fur:#FFFFFF;--fur-dark:#D9D3CB;--belly:#F6F3EE;--face:#3A332E;--nose:#EFA3A3;--ear-in:#F7CFC8;--blush:#F6C2BD;--zz:#3A332E;--book:#7FA6CF;--mug:#8DBB8A">
+      <path d="M84 45 L85 25 Q86 23 88 25 L94 34 L99 21 Q100 19 101 21 L106 34 L112 25 Q114 23 115 25 L116 45 Q100 49 84 45 Z" fill="#F3CF63" stroke="#3A332E" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="100" cy="39" r="2.8" fill="#E06A6A"/></svg>

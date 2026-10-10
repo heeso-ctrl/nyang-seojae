@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" style="--fur:#FFFFFF;--fur-dark:#D9D3CB;--belly:#F6F3EE;--face:#3A332E;--nose:#EFA3A3;--ear-in:#F7CFC8;--blush:#F6C2BD;--zz:#3A332E;--book:#7FA6CF;--mug:#8DBB8A">
+      <path d="M48 68 C46 52 51 38 57 29 Q61 24 67 30 L84 42 Q100 38 116 42 L133 30 Q139 24 143 29 C149 38 154 52 152 68 Z" fill="#7FA6CF" stroke="#3A332E" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M47 60 Q100 69 153 60 L153 71 Q100 80 47 71 Z" fill="#5E86B2" stroke="#3A332E" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M62 64 L62 70 M76 66 L76 72 M90 67 L90 73 M100 67 L100 74 M110 67 L110 73 M124 66 L124 72 M138 64 L138 70" stroke="#C3D5EA" stroke-width="1.8" stroke-linecap="round"/></svg>
