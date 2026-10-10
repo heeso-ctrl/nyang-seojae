@@ -22,10 +22,26 @@ export default defineConfig({
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+        ],
+        shortcuts: [
+          { name: '읽기 시작', short_name: '읽기 시작', url: './?action=start', icons: [{ src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' }] },
+          { name: '독서 종료', short_name: '독서 종료', url: './?action=finish', icons: [{ src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' }] }
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,webp,png,json}']
+        globPatterns: ['**/*.{js,css,html,webp,png,json}'],
+        runtimeCaching: [
+          {
+            // DEVICE-CHECK: 한 번 본 카카오 표지가 비행기 모드에서도 보이는지
+            urlPattern: /^https:\/\/[^/]+\.kakaocdn\.net\/.*$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'kakao-book-covers',
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: { maxEntries: 500 }
+            }
+          }
+        ]
       }
     })
   ],

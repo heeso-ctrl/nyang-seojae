@@ -10,6 +10,10 @@ export interface Book {
   category?: string;
   fileId?: string;
   coverBlobId?: string;
+  coverUrl?: string;
+  publisher?: string;
+  isbn?: string;
+  publishedYear?: number;
   totalPages?: number;
   currentPage?: number;
   progress?: number;

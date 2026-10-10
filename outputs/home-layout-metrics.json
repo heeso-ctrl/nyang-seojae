@@ -1,0 +1,490 @@
+[
+  {
+    "state": "idle",
+    "width": 632,
+    "height": 707,
+    "screenshot": "home-idle-632x707.png",
+    "viewport": {
+      "width": 632,
+      "height": 707,
+      "clientWidth": 632,
+      "clientHeight": 707,
+      "scrollWidth": 632,
+      "scrollHeight": 707
+    },
+    "scene": {
+      "left": 1,
+      "top": 0,
+      "right": 631,
+      "bottom": 647,
+      "width": 630,
+      "height": 647
+    },
+    "cat": {
+      "left": 322,
+      "top": 336,
+      "right": 505,
+      "bottom": 493,
+      "width": 183,
+      "height": 158
+    },
+    "card": {
+      "left": 11,
+      "top": 523,
+      "right": 621,
+      "bottom": 639,
+      "width": 610,
+      "height": 116
+    },
+    "note": {
+      "left": 13,
+      "top": 12,
+      "right": 293,
+      "bottom": 81,
+      "width": 280,
+      "height": 69
+    },
+    "shelf": {
+      "left": 523,
+      "top": 12,
+      "right": 619,
+      "bottom": 60,
+      "width": 96,
+      "height": 48
+    },
+    "verticalScroll": false,
+    "horizontalOverflow": false,
+    "catInsideScene": true,
+    "overlapX": 183,
+    "overlapY": 0,
+    "noteVisible": true,
+    "shelfVisible": true
+  },
+  {
+    "state": "idle",
+    "width": 632,
+    "height": 802,
+    "screenshot": "home-idle-632x802.png",
+    "viewport": {
+      "width": 632,
+      "height": 802,
+      "clientWidth": 632,
+      "clientHeight": 802,
+      "scrollWidth": 632,
+      "scrollHeight": 802
+    },
+    "scene": {
+      "left": 1,
+      "top": 0,
+      "right": 631,
+      "bottom": 742,
+      "width": 630,
+      "height": 742
+    },
+    "cat": {
+      "left": 322,
+      "top": 431,
+      "right": 505,
+      "bottom": 588,
+      "width": 183,
+      "height": 158
+    },
+    "card": {
+      "left": 11,
+      "top": 618,
+      "right": 621,
+      "bottom": 734,
+      "width": 610,
+      "height": 116
+    },
+    "note": {
+      "left": 13,
+      "top": 12,
+      "right": 293,
+      "bottom": 81,
+      "width": 280,
+      "height": 69
+    },
+    "shelf": {
+      "left": 523,
+      "top": 12,
+      "right": 619,
+      "bottom": 60,
+      "width": 96,
+      "height": 48
+    },
+    "verticalScroll": false,
+    "horizontalOverflow": false,
+    "catInsideScene": true,
+    "overlapX": 183,
+    "overlapY": 0,
+    "noteVisible": true,
+    "shelfVisible": true
+  },
+  {
+    "state": "idle",
+    "width": 390,
+    "height": 844,
+    "screenshot": "home-idle-390x844.png",
+    "viewport": {
+      "width": 390,
+      "height": 844,
+      "clientWidth": 390,
+      "clientHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 844
+    },
+    "scene": {
+      "left": 1,
+      "top": 0,
+      "right": 389,
+      "bottom": 784,
+      "width": 388,
+      "height": 784
+    },
+    "cat": {
+      "left": 137,
+      "top": 432,
+      "right": 289,
+      "bottom": 563,
+      "width": 152,
+      "height": 131
+    },
+    "card": {
+      "left": 7,
+      "top": 663,
+      "right": 383,
+      "bottom": 779,
+      "width": 376,
+      "height": 116
+    },
+    "note": {
+      "left": 13,
+      "top": 12,
+      "right": 195,
+      "bottom": 67,
+      "width": 182,
+      "height": 55
+    },
+    "shelf": {
+      "left": 281,
+      "top": 12,
+      "right": 377,
+      "bottom": 60,
+      "width": 96,
+      "height": 48
+    },
+    "verticalScroll": false,
+    "horizontalOverflow": false,
+    "catInsideScene": true,
+    "overlapX": 152,
+    "overlapY": 0,
+    "noteVisible": true,
+    "shelfVisible": true
+  },
+  {
+    "state": "idle",
+    "width": 390,
+    "height": 664,
+    "screenshot": "home-idle-390x664.png",
+    "viewport": {
+      "width": 390,
+      "height": 664,
+      "clientWidth": 390,
+      "clientHeight": 664,
+      "scrollWidth": 390,
+      "scrollHeight": 664
+    },
+    "scene": {
+      "left": 1,
+      "top": 0,
+      "right": 389,
+      "bottom": 604,
+      "width": 388,
+      "height": 604
+    },
+    "cat": {
+      "left": 192,
+      "top": 333,
+      "right": 309,
+      "bottom": 433,
+      "width": 117,
+      "height": 101
+    },
+    "card": {
+      "left": 7,
+      "top": 483,
+      "right": 383,
+      "bottom": 599,
+      "width": 376,
+      "height": 116
+    },
+    "note": {
+      "left": 13,
+      "top": 12,
+      "right": 195,
+      "bottom": 67,
+      "width": 182,
+      "height": 55
+    },
+    "shelf": {
+      "left": 281,
+      "top": 12,
+      "right": 377,
+      "bottom": 60,
+      "width": 96,
+      "height": 48
+    },
+    "verticalScroll": false,
+    "horizontalOverflow": false,
+    "catInsideScene": true,
+    "overlapX": 117,
+    "overlapY": 0,
+    "noteVisible": true,
+    "shelfVisible": true
+  },
+  {
+    "state": "running",
+    "width": 632,
+    "height": 707,
+    "screenshot": "home-running-632x707.png",
+    "viewport": {
+      "width": 632,
+      "height": 707,
+      "clientWidth": 632,
+      "clientHeight": 707,
+      "scrollWidth": 632,
+      "scrollHeight": 707
+    },
+    "scene": {
+      "left": 1,
+      "top": 0,
+      "right": 631,
+      "bottom": 647,
+      "width": 630,
+      "height": 647
+    },
+    "cat": {
+      "left": 334,
+      "top": 229,
+      "right": 528,
+      "bottom": 479,
+      "width": 194,
+      "height": 250
+    },
+    "card": {
+      "left": 11,
+      "top": 515,
+      "right": 621,
+      "bottom": 639,
+      "width": 610,
+      "height": 124
+    },
+    "note": {
+      "left": 13,
+      "top": 12,
+      "right": 293,
+      "bottom": 81,
+      "width": 280,
+      "height": 69
+    },
+    "shelf": {
+      "left": 523,
+      "top": 12,
+      "right": 619,
+      "bottom": 60,
+      "width": 96,
+      "height": 48
+    },
+    "verticalScroll": false,
+    "horizontalOverflow": false,
+    "catInsideScene": true,
+    "overlapX": 194,
+    "overlapY": 0,
+    "noteVisible": true,
+    "shelfVisible": true
+  },
+  {
+    "state": "running",
+    "width": 632,
+    "height": 802,
+    "screenshot": "home-running-632x802.png",
+    "viewport": {
+      "width": 632,
+      "height": 802,
+      "clientWidth": 632,
+      "clientHeight": 802,
+      "scrollWidth": 632,
+      "scrollHeight": 802
+    },
+    "scene": {
+      "left": 1,
+      "top": 0,
+      "right": 631,
+      "bottom": 742,
+      "width": 630,
+      "height": 742
+    },
+    "cat": {
+      "left": 334,
+      "top": 324,
+      "right": 528,
+      "bottom": 574,
+      "width": 194,
+      "height": 250
+    },
+    "card": {
+      "left": 11,
+      "top": 610,
+      "right": 621,
+      "bottom": 734,
+      "width": 610,
+      "height": 124
+    },
+    "note": {
+      "left": 13,
+      "top": 12,
+      "right": 293,
+      "bottom": 81,
+      "width": 280,
+      "height": 69
+    },
+    "shelf": {
+      "left": 523,
+      "top": 12,
+      "right": 619,
+      "bottom": 60,
+      "width": 96,
+      "height": 48
+    },
+    "verticalScroll": false,
+    "horizontalOverflow": false,
+    "catInsideScene": true,
+    "overlapX": 194,
+    "overlapY": 0,
+    "noteVisible": true,
+    "shelfVisible": true
+  },
+  {
+    "state": "running",
+    "width": 390,
+    "height": 844,
+    "screenshot": "home-running-390x844.png",
+    "viewport": {
+      "width": 390,
+      "height": 844,
+      "clientWidth": 390,
+      "clientHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 844
+    },
+    "scene": {
+      "left": 1,
+      "top": 0,
+      "right": 389,
+      "bottom": 784,
+      "width": 388,
+      "height": 784
+    },
+    "cat": {
+      "left": 147,
+      "top": 343,
+      "right": 308,
+      "bottom": 551,
+      "width": 161,
+      "height": 208
+    },
+    "card": {
+      "left": 7,
+      "top": 655,
+      "right": 383,
+      "bottom": 779,
+      "width": 376,
+      "height": 124
+    },
+    "note": {
+      "left": 13,
+      "top": 12,
+      "right": 195,
+      "bottom": 67,
+      "width": 182,
+      "height": 55
+    },
+    "shelf": {
+      "left": 281,
+      "top": 12,
+      "right": 377,
+      "bottom": 60,
+      "width": 96,
+      "height": 48
+    },
+    "verticalScroll": false,
+    "horizontalOverflow": false,
+    "catInsideScene": true,
+    "overlapX": 161,
+    "overlapY": 0,
+    "noteVisible": true,
+    "shelfVisible": true
+  },
+  {
+    "state": "running",
+    "width": 390,
+    "height": 664,
+    "screenshot": "home-running-390x664.png",
+    "viewport": {
+      "width": 390,
+      "height": 664,
+      "clientWidth": 390,
+      "clientHeight": 664,
+      "scrollWidth": 390,
+      "scrollHeight": 664
+    },
+    "scene": {
+      "left": 1,
+      "top": 0,
+      "right": 389,
+      "bottom": 604,
+      "width": 388,
+      "height": 604
+    },
+    "cat": {
+      "left": 199,
+      "top": 264,
+      "right": 323,
+      "bottom": 424,
+      "width": 124,
+      "height": 160
+    },
+    "card": {
+      "left": 7,
+      "top": 475,
+      "right": 383,
+      "bottom": 599,
+      "width": 376,
+      "height": 124
+    },
+    "note": {
+      "left": 13,
+      "top": 12,
+      "right": 195,
+      "bottom": 67,
+      "width": 182,
+      "height": 55
+    },
+    "shelf": {
+      "left": 281,
+      "top": 12,
+      "right": 377,
+      "bottom": 60,
+      "width": 96,
+      "height": 48
+    },
+    "verticalScroll": false,
+    "horizontalOverflow": false,
+    "catInsideScene": true,
+    "overlapX": 124,
+    "overlapY": 0,
+    "noteVisible": true,
+    "shelfVisible": true
+  }
+]
