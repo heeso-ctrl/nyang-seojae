@@ -27,8 +27,7 @@ jobs:
         with:
           name: nyang-seojae-apk
           path: nyang-seojae.apk
-      - name: main 이면 릴리스(android-latest)에 올리기
-        if: github.ref == 'refs/heads/main'
+      - name: 릴리스(android-latest)에 올리기
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
