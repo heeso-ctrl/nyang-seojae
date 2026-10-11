@@ -3,6 +3,7 @@ import { db, exportBackup, importBackup } from './db';
 import { activeSeconds, isPaused, localDayBounds } from './timer';
 import { parseOptionalNumber, resolveProgress } from './progress';
 import { computeArtLayout } from './artLayout';
+import { dentBox, dentMarkup, type CushionDent } from './dent';
 import { kakaoErrorMessage, searchKakaoBooks, type KakaoBookResult } from './kakao';
 import type { ActiveTimer, Book, BookSource, BookStatus, Quote, Session } from './types';
 import { sourceLabels, statusLabels } from './types';
@@ -191,6 +192,8 @@ function Home(props: {
   const [previewPose, setPreviewPose] = useState<Pose>();
   const pose = previewPose ?? actualPose;
   const sprite = alignData.sprites[pose];
+  const dent = (sprite as typeof sprite & { dent?: CushionDent }).dent;
+  const dentPosition = dent ? dentBox(dent) : undefined;
   const viewportRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(() => computeArtLayout(1, 1));
   const [dayStart, dayEnd] = localDayBounds();
@@ -223,6 +226,16 @@ function Home(props: {
       <div className="scene-viewport" ref={viewportRef}>
         <div className="art-box" style={{ width: layout.width, height: layout.height, left: layout.left, top: layout.top }}>
           <img className="scene-bg" src={`${import.meta.env.BASE_URL}art/${theme.file}`} alt="" />
+          {/* DEVICE-CHECK: BOOX 컬러 e잉크에서 눌림 자국이 너무 진하거나 얼룩처럼 보이지 않는지 */}
+          {/* DEVICE-CHECK: mix-blend-mode: multiply가 BOOX Chrome에서 적용되는지(안 되면 연한 회색 면으로 보임) */}
+          {dent && dentPosition && <svg
+            className="cushion-dent"
+            aria-hidden="true"
+            viewBox="0 0 260 100"
+            preserveAspectRatio="none"
+            style={{ left: `${dentPosition.left}%`, top: `${dentPosition.top}%`, width: `${dentPosition.width}%`, height: `${dentPosition.height}%` }}
+            dangerouslySetInnerHTML={{ __html: dentMarkup(dent) }}
+          />}
           <button className="cat-hit" onClick={previewNextPose} aria-label="고양이 자세 미리보기" style={{ left: `${sprite.x}%`, top: `${sprite.y}%`, height: `${sprite.h}%`, transform: `translate(-50%, -100%)${sprite.flip ? ' scaleX(-1)' : ''}` }}>
             <img className="cat-sprite" src={`${import.meta.env.BASE_URL}art/cat/${sprite.file}`} alt={pose === 'reading' ? '책 읽는 고양이' : pose === 'resting' ? '쉬는 고양이' : pose === 'sleeping' ? '자는 고양이' : '기다리는 고양이'} />
           </button>
