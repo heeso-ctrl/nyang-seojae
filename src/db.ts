@@ -3,6 +3,7 @@ import type {
   ActiveTimer, Book, CoinLog, EditNote, EpubFile, Equipped,
   OwnedItem, Preference, Quote, Session, StoredBlob, Wallet
 } from './types';
+import { preferencesForBackup, preferencesForImport } from './backup';
 
 export class NyangDatabase extends Dexie {
   books!: EntityTable<Book, 'id'>;
@@ -50,7 +51,7 @@ export async function exportBackup(): Promise<Blob> {
     type: item.blob.type,
     data: await blobToDataUrl(item.blob)
   })));
-  return new Blob([JSON.stringify({ version: 1, exportedAt: Date.now(), books, sessions, quotes, preferences, activeTimers, blobs: encodedBlobs }, null, 2)], { type: 'application/json' });
+  return new Blob([JSON.stringify({ version: 1, exportedAt: Date.now(), books, sessions, quotes, preferences: preferencesForBackup(preferences), activeTimers, blobs: encodedBlobs }, null, 2)], { type: 'application/json' });
 }
 
 export async function importBackup(file: File): Promise<void> {
@@ -58,12 +59,15 @@ export async function importBackup(file: File): Promise<void> {
   if (payload.version !== 1 || !Array.isArray(payload.books)) throw new Error('지원하지 않는 백업 파일입니다.');
   const encoded = Array.isArray(payload.blobs) ? payload.blobs as Array<{id: string; kind: StoredBlob['kind']; data: string}> : [];
   const blobs = await Promise.all(encoded.map(async (item) => ({ id: item.id, kind: item.kind, blob: await (await fetch(item.data)).blob() })));
+  const currentPreferences = await db.preferences.toArray();
+  const importedPreferences = Array.isArray(payload.preferences) ? payload.preferences as Preference[] : [];
+  const nextPreferences = preferencesForImport(currentPreferences, importedPreferences);
   await db.transaction('rw', [db.books, db.sessions, db.quotes, db.preferences, db.activeTimers, db.blobs], async () => {
     await Promise.all([db.books.clear(), db.sessions.clear(), db.quotes.clear(), db.preferences.clear(), db.activeTimers.clear(), db.blobs.clear()]);
     await db.books.bulkPut(payload.books as Book[]);
     if (Array.isArray(payload.sessions)) await db.sessions.bulkPut(payload.sessions as Session[]);
     if (Array.isArray(payload.quotes)) await db.quotes.bulkPut(payload.quotes as Quote[]);
-    if (Array.isArray(payload.preferences)) await db.preferences.bulkPut(payload.preferences as Preference[]);
+    await db.preferences.bulkPut(nextPreferences);
     if (Array.isArray(payload.activeTimers)) await db.activeTimers.bulkPut(payload.activeTimers as ActiveTimer[]);
     await db.blobs.bulkPut(blobs);
   });
