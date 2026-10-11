@@ -260,6 +260,10 @@ class View {
                     return
                 }
                 const doc = this.document
+                if (!doc) {
+                    resolve()
+                    return
+                }
                 afterLoad?.(doc)
 
                 // it needs to be visible for Firefox to get computed style
@@ -290,7 +294,7 @@ class View {
         })
     }
     render(layout) {
-        if (!layout) return
+        if (this.#destroyed || !this.document || !layout) return
         this.#column = layout.flow !== 'scrolled'
         this.#layout = layout
         if (this.#column) this.columnize(layout)
@@ -299,6 +303,7 @@ class View {
     scrolled({ gap, columnWidth }) {
         const vertical = this.#vertical
         const doc = this.document
+        if (this.#destroyed || !doc) return
         setStylesImportant(doc.documentElement, {
             'box-sizing': 'border-box',
             'padding': vertical ? `${gap}px 0` : `0 ${gap}px`,
@@ -318,6 +323,7 @@ class View {
         this.#size = vertical ? height : width
 
         const doc = this.document
+        if (this.#destroyed || !doc) return
         setStylesImportant(doc.documentElement, {
             'box-sizing': 'border-box',
             'column-width': `${Math.trunc(columnWidth)}px`,
@@ -349,6 +355,7 @@ class View {
         const { width, height, margin } = this.#layout
         const vertical = this.#vertical
         const doc = this.document
+        if (this.#destroyed || !doc) return
         for (const el of doc.body.querySelectorAll('img, svg, video')) {
             // preserve max size if they are already set
             const { maxHeight, maxWidth } = doc.defaultView.getComputedStyle(el)
@@ -418,6 +425,7 @@ class View {
         this.onExpand()
     }
     set overlayer(overlayer) {
+        if (this.#destroyed) return
         this.#overlayer = overlayer
         this.#element.append(overlayer.element)
     }
@@ -427,6 +435,7 @@ class View {
     destroy() {
         this.#destroyed = true
         this.#observer.disconnect()
+        this.onExpand = () => {}
     }
 }
 

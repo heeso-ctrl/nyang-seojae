@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { db } from './db';
 import { ensureFoliate, readerCss, type FoliateRelocate, type FoliateTocItem, type FoliateViewElement } from './epub';
 import { finishReaderClock, readerAutoPause, readerInput, readerVisibility, READER_IDLE_MS, type ReaderClock } from './readerSession';
@@ -100,6 +100,25 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
     void (effective === 'next' ? viewRef.current?.next() : viewRef.current?.prev());
   }, [markInput]);
 
+  const handleTap = useCallback((ratio: number) => {
+    if (ratio < 1 / 3) turn('previous');
+    else if (ratio > 2 / 3) turn('next');
+    else {
+      markInput();
+      setToolsVisible((value) => !value);
+    }
+  }, [markInput, turn]);
+
+  const handleViewerClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    const hasSelection = window.getSelection()?.type === 'Range'
+      || viewRef.current?.renderer.getContents?.().some(({ doc }) => doc.getSelection()?.type === 'Range');
+    if (hasSelection) return;
+    const target = event.target as Element | null;
+    if (target?.closest?.('a, button, input, select, textarea, [role="dialog"], .reader-toolbar, .reader-panel')) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    handleTap((event.clientX - bounds.left) / Math.max(1, bounds.width));
+  }, [handleTap]);
+
   useEffect(() => {
     let live = true;
     let view: FoliateViewElement | undefined;
@@ -167,14 +186,11 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
           };
           const clickListener = (e: MouseEvent) => {
             if (doc.getSelection()?.type === 'Range' || (e.target as Element | null)?.closest?.('a')) return;
-            markInput();
             const frame = doc.defaultView?.frameElement as HTMLElement | null;
             const frameRect = frame?.getBoundingClientRect();
             const viewerRect = view?.getBoundingClientRect() ?? mountRef.current?.getBoundingClientRect();
             const ratio = readerTapRatio(e.clientX, doc.documentElement.clientWidth, frameRect, viewerRect);
-            if (ratio < 1 / 3) turn('previous');
-            else if (ratio > 2 / 3) turn('next');
-            else setToolsVisible((value) => !value);
+            handleTap(ratio);
           };
           doc.addEventListener('keydown', keyListener);
           doc.addEventListener('scroll', scrollListener, { passive: true });
@@ -243,7 +259,7 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
       view?.close();
       view?.remove();
     };
-  }, [book.id, epubFile.blob, epubFile.lastCfi, epubFile.name, initialCfi, markInput, persistLocation, scheduleIdle, turn]);
+  }, [book.id, epubFile.blob, epubFile.lastCfi, epubFile.name, handleTap, initialCfi, markInput, persistLocation, scheduleIdle, turn]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -323,7 +339,7 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
       <button onClick={() => { setTocOpen((value) => !value); setStyleOpen(false); }}>목차</button>
       <button onClick={() => { setStyleOpen((value) => !value); setTocOpen(false); }}>글자 설정</button>
     </header>}
-    <div ref={mountRef} className="reader-mount" aria-label={`${book.title} epub 본문`} />
+    <div ref={mountRef} className="reader-mount" aria-label={`${book.title} epub 본문`} onClick={handleViewerClick} />
     {error && <div className="reader-error" role="alert">{error}<button onClick={() => void finish()}>나가기</button></div>}
     {toolsVisible && <footer className="reader-toolbar reader-bottombar">
       <label><span>{Math.round(progress * 100)}%</span><input aria-label="읽기 진행률" type="range" min="0" max="1" step="0.001" value={progress} onChange={(event) => { const value = Number(event.target.value); progressRef.current = value; setProgress(value); markInput(); void viewRef.current?.goToFraction(value); }} /></label>
