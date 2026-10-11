@@ -227,7 +227,12 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
         view.addEventListener('create-overlay', onCreateOverlay);
         view.addEventListener('draw-annotation', onDrawAnnotation);
         window.addEventListener('keydown', handleKey);
+        // 안드로이드 앱: 뷰어가 열려 있는 동안 BOOX 물리 버튼(볼륨 키로 들어옴)을 쪽 넘김 키로 바꿔 달라고 알린다.
+        // DEVICE-CHECK: 안드로이드 앱 뷰어에서 BOOX 물리 버튼으로 쪽이 넘어가고 음량 막대가 뜨지 않는지
+        const androidBridge = (window as unknown as { NyangAndroid?: { setReaderOpen?(open: boolean): void } }).NyangAndroid;
+        androidBridge?.setReaderOpen?.(true);
         listeners.push(() => {
+          androidBridge?.setReaderOpen?.(false);
           view?.removeEventListener('load', onLoad);
           view?.removeEventListener('relocate', onRelocate);
           view?.removeEventListener('create-overlay', onCreateOverlay);

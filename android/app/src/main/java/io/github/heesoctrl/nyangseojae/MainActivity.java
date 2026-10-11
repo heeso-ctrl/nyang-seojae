@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
+import android.view.KeyEvent;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -32,6 +33,8 @@ public class MainActivity extends Activity {
 
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
+    /** 웹앱 뷰어가 열려 있는지. 열려 있을 때만 볼륨 키(BOOX 물리 버튼)를 쪽 넘김으로 쓴다. */
+    private volatile boolean readerOpen = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,16 +65,29 @@ public class MainActivity extends Activity {
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
-            // 표지 이미지 선택, 백업 가져오기용 파일 선택 창
+            // 표지 이미지 선택, epub 추가, 백업 가져오기용 파일 선택 창.
+            // 웹의 accept(".epub" 같은 확장자)를 그대로 넘기면 BOOX 파일 선택 창이 빈 목록을 보여서,
+            // 이미지가 아니면 모든 파일을 보여 주고 형식 확인은 웹앱이 한다.
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = callback;
+                boolean imagesOnly = true;
+                String[] accept = params.getAcceptTypes();
+                if (accept == null || accept.length == 0) imagesOnly = false;
+                else for (String a : accept) if (a == null || !a.trim().startsWith("image/")) { imagesOnly = false; break; }
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType(imagesOnly ? "image/*" : "*/*");
                 try {
-                    startActivityForResult(params.createIntent(), FILE_REQUEST);
+                    startActivityForResult(intent, FILE_REQUEST);
                 } catch (ActivityNotFoundException e) {
-                    fileCallback = null;
-                    return false;
+                    try {
+                        startActivityForResult(params.createIntent(), FILE_REQUEST);
+                    } catch (ActivityNotFoundException e2) {
+                        fileCallback = null;
+                        return false;
+                    }
                 }
                 return true;
             }
@@ -96,6 +112,19 @@ public class MainActivity extends Activity {
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         web.saveState(outState);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int code = event.getKeyCode();
+        if (readerOpen && (code == KeyEvent.KEYCODE_VOLUME_DOWN || code == KeyEvent.KEYCODE_VOLUME_UP)) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                String key = code == KeyEvent.KEYCODE_VOLUME_DOWN ? "PageDown" : "PageUp";
+                web.evaluateJavascript("window.dispatchEvent(new KeyboardEvent('keydown',{key:'" + key + "',code:'" + key + "',bubbles:true,cancelable:true}))", null);
+            }
+            return true; // 음량 막대가 뜨지 않게 소비한다.
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override
@@ -125,6 +154,11 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 return false;
             }
+        }
+
+        @JavascriptInterface
+        public void setReaderOpen(boolean open) {
+            readerOpen = open;
         }
 
         @JavascriptInterface
