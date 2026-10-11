@@ -61,9 +61,15 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri u = request.getUrl();
+                // epub 뷰어는 본문을 iframe 안의 blob: 주소로 띄운다. iframe 이동이나 blob:/data:/about: 주소를
+                // 가로채면 본문이 영영 안 열려 백지가 된다(BOOX 실기기 백지 원인). 이런 이동은 그대로 둔다.
+                if (!request.isForMainFrame()) return false;
+                String scheme = u.getScheme() == null ? "" : u.getScheme();
+                if (scheme.equals("blob") || scheme.equals("data") || scheme.equals("about")) return false;
                 String path = u.getPath() == null ? "" : u.getPath();
                 if (HOST.equals(u.getHost()) && path.startsWith(PATH)) return false;
-                // 냥서재 밖의 주소는 바깥 브라우저로 연다.
+                // 냥서재 밖의 http(s) 주소만 바깥 브라우저로 연다.
+                if (!scheme.equals("http") && !scheme.equals("https")) return true;
                 try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (ActivityNotFoundException ignored) { }
                 return true;
             }
