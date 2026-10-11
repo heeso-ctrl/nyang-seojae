@@ -189,7 +189,13 @@ interface ActiveTimer { id: 'current'; bookId: string; startedAt: number; pauses
 - 퇴고 메모 목록.
 
 ### 5단계(선택) — Android 앱으로 래핑
-- Capacitor APK, 사이드로드.
+- **(2026-10-11 앞당겨 일부 완료) `android/` WebView 앱 껍데기.** BOOX의 Chrome이 진짜 설치 앱(WebAPK)을 만들지 못하고 주소창 달린 아이콘만 만들어서 앞당겼다(기기 점검으로 확인: WebAPK 없음, 내장 Chromium 111 + 구글 Chrome 154 공존).
+  - 앱은 배포된 웹앱(GitHub Pages)을 주소창 없이 띄운다. 화면 수정은 웹앱만 고치면 앱에도 바로 반영되고, 오프라인은 웹앱 서비스워커가 맡는다.
+  - 기록(IndexedDB)은 앱 안에 따로 저장된다(Chrome과 공유 안 함). 옮길 때는 JSON 백업.
+  - 파일 선택 창(표지·백업 가져오기)과 백업 저장(`window.NyangAndroid.saveFile` → 다운로드/냥서재 폴더)을 앱이 제공한다.
+  - APK는 GitHub Actions(`.github/workflows/android.yml`)가 만들고 `android-latest` 릴리스에 올린다. 같은 서명 키(`android/keystore/`)로 서명해 덮어 설치(기록 유지)한다.
+  - 설치는 PC의 `문서/nyang-adb/3-install.bat`(USB 디버깅) 또는 BOOX에서 릴리스 파일을 직접 받아 설치.
+- 이후 할 것: 도서관 앱 사용 시간 자동 집계(아래), 앱 바로가기(아이콘 길게 누르기)는 웹 manifest가 아니라 앱 쪽에 다시 만들어야 한다.
 - 도서관 앱 사용 시간 자동 집계(`UsageStatsManager`) → 세션 후보로 제안 → 승인 시 기록. **BOOX에서 동작 여부 미확인**, 작은 테스트 앱으로 먼저 확인.
 
 ### 후순위(범위 안이지만 지금 하지 않음)
