@@ -9,6 +9,9 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
+import android.util.Log;
+import android.view.KeyEvent;
+import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -31,11 +34,15 @@ public class MainActivity extends Activity {
     private static final int FILE_REQUEST = 1001;
 
     private WebView web;
+    /** 뷰어가 열려 있으면 웹앱이 true 로 알려 준다. 그동안 BOOX 페이지 버튼(음량 키)을 페이지 넘김으로 보낸다. */
+    private volatile boolean readerActive = false;
     private ValueCallback<Uri[]> fileCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 개인용 앱: PC 의 chrome://inspect 로 문제를 볼 수 있게 디버깅을 켠다.
+        WebView.setWebContentsDebuggingEnabled(true);
         web = new WebView(this);
         setContentView(web);
 
@@ -62,6 +69,13 @@ public class MainActivity extends Activity {
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
+            // 웹앱 console 메시지를 logcat(NyangConsole)에 남긴다. 기기 점검용.
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage m) {
+                Log.i("NyangConsole", m.messageLevel() + " " + m.message() + " @" + m.sourceId() + ":" + m.lineNumber());
+                return true;
+            }
+
             // 표지 이미지 선택, 백업 가져오기용 파일 선택 창
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
@@ -98,6 +112,20 @@ public class MainActivity extends Activity {
         web.saveState(outState);
     }
 
+    /** BOOX 옆면 페이지 버튼은 음량 키로 들어온다(기기 점검: gpio-keys KEY_VOLUMEUP). 뷰어가 열려 있을 때만 넘김으로 바꾼다. */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int code = event.getKeyCode();
+        if (readerActive && (code == KeyEvent.KEYCODE_VOLUME_UP || code == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                String dir = code == KeyEvent.KEYCODE_VOLUME_UP ? "previous" : "next";
+                web.evaluateJavascript("window.dispatchEvent(new CustomEvent('nyang-page',{detail:'" + dir + "'}))", null);
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
     @Override
     public void onBackPressed() {
         if (web.canGoBack()) web.goBack();
@@ -125,6 +153,11 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 return false;
             }
+        }
+
+        @JavascriptInterface
+        public void setReaderActive(boolean active) {
+            readerActive = active;
         }
 
         @JavascriptInterface
