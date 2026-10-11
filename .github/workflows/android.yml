@@ -2,7 +2,7 @@ name: 안드로이드 앱 빌드
 
 on:
   push:
-    branches: [main, android-app]
+    branches: [main]
     paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 
@@ -27,7 +27,8 @@ jobs:
         with:
           name: nyang-seojae-apk
           path: nyang-seojae.apk
-      - name: 릴리스(android-latest)에 올리기
+      - name: main 이면 릴리스(android-latest)에 올리기
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
