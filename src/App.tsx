@@ -5,7 +5,9 @@ import { parseOptionalNumber, resolveProgress } from './progress';
 import { computeArtLayout } from './artLayout';
 import { dentBox, dentMarkup, type CushionDent } from './dent';
 import { kakaoErrorMessage, searchKakaoBooks, type KakaoBookResult } from './kakao';
-import type { ActiveTimer, Book, BookSource, BookStatus, Quote, Session } from './types';
+import { readEpubMetadata } from './epub';
+import { ReaderView } from './ReaderView';
+import type { ActiveTimer, Book, BookSource, BookStatus, EditNote, EpubFile, Quote, ReaderKeys, Session } from './types';
 import { sourceLabels, statusLabels } from './types';
 import alignData from '../public/art/cat/align.json';
 import themeData from '../public/art/themes.json';
@@ -14,6 +16,7 @@ type MainTab = 'home' | 'library' | 'calendar' | 'quotes' | 'settings';
 type Modal = 'add-book' | 'finish' | 'quote' | 'manual-session' | 'edit-book' | null;
 type SortKey = 'recent' | 'created' | 'title' | 'progress';
 type Pose = keyof typeof alignData.sprites;
+type ReaderTarget = { book: Book; epubFile: EpubFile; timer: ActiveTimer; cfi?: string };
 
 const tabItems: Array<{ id: MainTab; label: string; symbol: string }> = [
   { id: 'home', label: '홈', symbol: '⌂' },
@@ -43,6 +46,7 @@ function App() {
   const [books, setBooks] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [editNotes, setEditNotes] = useState<EditNote[]>([]);
   const [timer, setTimer] = useState<ActiveTimer>();
   const [tab, setTab] = useState<MainTab>('home');
   const [selectedBookId, setSelectedBookId] = useState<string>();
@@ -51,15 +55,18 @@ function App() {
   const [themeId, setThemeId] = useState(themeData.default);
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState('');
+  const [reader, setReader] = useState<ReaderTarget>();
+  const [pendingReader, setPendingReader] = useState<{ book: Book; cfi?: string }>();
 
   const refresh = useCallback(async () => {
-    const [nextBooks, nextSessions, nextQuotes, nextTimer, themePref] = await Promise.all([
+    const [nextBooks, nextSessions, nextQuotes, nextEditNotes, nextTimer, themePref] = await Promise.all([
       db.books.toArray(), db.sessions.toArray(), db.quotes.toArray(),
-      db.activeTimers.get('current'), db.preferences.get('theme')
+      db.editNotes.toArray(), db.activeTimers.get('current'), db.preferences.get('theme')
     ]);
     setBooks(nextBooks);
     setSessions(nextSessions);
     setQuotes(nextQuotes);
+    setEditNotes(nextEditNotes);
     setTimer(nextTimer);
     if (typeof themePref?.value === 'string') setThemeId(themePref.value);
   }, []);
@@ -140,13 +147,49 @@ function App() {
     await refresh();
   }
 
+  async function beginReader(book: Book, cfi?: string) {
+    if (!book.fileId) { setNotice('epub 파일 다시 넣기가 필요합니다.'); return; }
+    const epubFile = await db.epubFiles.get(book.fileId);
+    if (!epubFile) { setNotice('epub 파일 다시 넣기가 필요합니다.'); return; }
+    let active = await db.activeTimers.get('current');
+    if (!active) {
+      active = { id: 'current', bookId: book.id, startedAt: Date.now(), pauses: [] };
+      await db.activeTimers.put(active);
+    }
+    setReader({ book, epubFile, timer: active, cfi });
+    setPendingReader(undefined);
+    await refresh();
+  }
+
+  async function openReader(book: Book, cfi?: string) {
+    const active = await db.activeTimers.get('current');
+    if (active && active.bookId !== book.id) {
+      setPendingReader({ book, cfi });
+      return;
+    }
+    await beginReader(book, cfi);
+  }
+
+  async function saveOtherTimerAndOpen() {
+    if (!pendingReader) return;
+    const active = await db.activeTimers.get('current');
+    if (active) {
+      const endedAt = Date.now();
+      await db.transaction('rw', db.sessions, db.activeTimers, async () => {
+        await db.sessions.put({ id: uid(), bookId: active.bookId, startedAt: active.startedAt, endedAt, activeSec: activeSeconds(active, endedAt), pauses: active.pauses.map((pause) => pause.until === undefined ? { ...pause, until: endedAt } : pause), mode: 'timer' });
+        await db.activeTimers.delete('current');
+      });
+    }
+    await beginReader(pendingReader.book, pendingReader.cfi);
+  }
+
   function openBook(book: Book) {
     setSelectedBookId(book.id);
     setTab('library');
   }
 
   const view = selectedBook && tab === 'library'
-    ? <BookDetail book={selectedBook} sessions={sessions} quotes={quotes} onBack={() => setSelectedBookId(undefined)} onRefresh={refresh} onStart={() => void startReading(selectedBook)} onModal={setModal} />
+    ? <BookDetail book={selectedBook} sessions={sessions} quotes={quotes} editNotes={editNotes} onBack={() => setSelectedBookId(undefined)} onRefresh={refresh} onStart={() => void startReading(selectedBook)} onRead={(cfi) => void openReader(selectedBook, cfi)} onModal={setModal} setNotice={setNotice} />
     : tab === 'home'
       ? <Home books={books} sessions={sessions} timer={timer} currentBook={currentBook} elapsedSec={elapsedSec} paused={timerPaused} themeId={themeId} onStart={startReading} onPause={togglePause} onFinish={() => setModal('finish')} onQuote={() => setModal('quote')} onAddBook={() => { setLibraryStatus('reading'); setTab('library'); setModal('add-book'); }} onShowDone={() => { setLibraryStatus('done'); setTab('library'); }} />
       : tab === 'library'
@@ -154,8 +197,10 @@ function App() {
         : tab === 'calendar'
           ? <Calendar books={books} sessions={sessions} onOpenBook={openBook} />
           : tab === 'quotes'
-            ? <QuotesView books={books} quotes={quotes} onOpenBook={openBook} />
+            ? <QuotesView books={books} quotes={quotes} onOpenBook={openBook} onOpenReader={(book, cfi) => void openReader(book, cfi)} />
             : <Settings themeId={themeId} setThemeId={async (id) => { await db.preferences.put({ key: 'theme', value: id }); setThemeId(id); }} onImported={refresh} setNotice={setNotice} />;
+
+  if (reader) return <ReaderView book={reader.book} epubFile={reader.epubFile} timer={reader.timer} initialCfi={reader.cfi} onChanged={refresh} onExit={() => setReader(undefined)} />;
 
   return (
     <div className={`app-shell ${tab === 'home' ? 'home-active' : ''}`}>
@@ -172,11 +217,12 @@ function App() {
         ))}
       </nav>
       {notice && <div className="toast" role="status">{notice}</div>}
-      {modal === 'add-book' && <BookForm onClose={() => setModal(null)} onSaved={refresh} onOpenSettings={() => { setModal(null); setTab('settings'); }} />}
+      {modal === 'add-book' && <BookForm onClose={() => setModal(null)} onSaved={refresh} onOpenSettings={() => { setModal(null); setTab('settings'); }} onOpenBook={(book) => { setSelectedBookId(book.id); setTab('library'); }} setNotice={setNotice} />}
       {modal === 'finish' && timer && currentBook && <FinishForm timer={timer} book={currentBook} onClose={() => setModal(null)} onSaved={refresh} onDiscard={discardTimer} />}
       {modal === 'quote' && currentBook && <QuoteForm book={currentBook} onClose={() => setModal(null)} onSaved={refresh} />}
       {modal === 'manual-session' && selectedBook && <ManualSessionForm book={selectedBook} onClose={() => setModal(null)} onSaved={refresh} />}
-      {modal === 'edit-book' && selectedBook && <BookForm book={selectedBook} onClose={() => setModal(null)} onSaved={refresh} onOpenSettings={() => { setModal(null); setTab('settings'); }} />}
+      {modal === 'edit-book' && selectedBook && <BookForm book={selectedBook} onClose={() => setModal(null)} onSaved={refresh} onOpenSettings={() => { setModal(null); setTab('settings'); }} onOpenBook={(next) => { setSelectedBookId(next.id); setTab('library'); }} setNotice={setNotice} />}
+      {pendingReader && <Dialog title="다른 책을 읽는 중이에요" onClose={() => setPendingReader(undefined)}><p><strong>{books.find((item) => item.id === timer?.bookId)?.title ?? '다른 책'}</strong>의 기록을 저장하고 이 책을 열까요?</p><div className="form-actions"><button onClick={() => setPendingReader(undefined)}>취소</button><button className="primary" onClick={() => void saveOtherTimerAndOpen()}>그 책 기록 저장하고 이 책 읽기</button></div></Dialog>}
     </div>
   );
 }
@@ -295,11 +341,14 @@ function Library({ books, status, setStatus, onOpenBook, onAdd }: { books: Book[
   </div>;
 }
 
-function BookDetail({ book, sessions, quotes, onBack, onRefresh, onStart, onModal }: { book: Book; sessions: Session[]; quotes: Quote[]; onBack: () => void; onRefresh: () => Promise<void>; onStart: () => void; onModal: (modal: Modal) => void }) {
+function BookDetail({ book, sessions, quotes, editNotes, onBack, onRefresh, onStart, onRead, onModal, setNotice }: { book: Book; sessions: Session[]; quotes: Quote[]; editNotes: EditNote[]; onBack: () => void; onRefresh: () => Promise<void>; onStart: () => void; onRead: (cfi?: string) => void; onModal: (modal: Modal) => void; setNotice: (message: string) => void }) {
   const [subtab, setSubtab] = useState<'info' | 'records'>('info');
   const [editing, setEditing] = useState<{ kind: 'session'; item: Session } | { kind: 'quote'; item: Quote }>();
+  const [hasEpub, setHasEpub] = useState(book.source !== 'own-epub');
+  const replaceFileRef = useRef<HTMLInputElement>(null);
   const bookSessions = sessions.filter((item) => item.bookId === book.id);
   const bookQuotes = quotes.filter((item) => item.bookId === book.id);
+  const bookEditNotes = editNotes.filter((item) => item.bookId === book.id).sort((a, b) => b.createdAt - a.createdAt);
   const timeline = [...bookSessions.map((item) => ({ kind: 'session' as const, at: item.startedAt, item })), ...bookQuotes.map((item) => ({ kind: 'quote' as const, at: item.createdAt, item }))].sort((a, b) => b.at - a.at);
 
   async function cycleStatus() {
@@ -314,13 +363,45 @@ function BookDetail({ book, sessions, quotes, onBack, onRefresh, onStart, onModa
     await onRefresh();
   }
 
+  useEffect(() => {
+    if (book.source !== 'own-epub' || !book.fileId) { setHasEpub(book.source !== 'own-epub'); return; }
+    void db.epubFiles.get(book.fileId).then((item) => setHasEpub(Boolean(item)));
+  }, [book.fileId, book.source]);
+
+  async function replaceEpub(file?: File) {
+    if (!file) return;
+    try {
+      const metadata = await readEpubMetadata(file);
+      const fileId = book.fileId ?? uid();
+      let coverBlobId = book.coverBlobId;
+      if (metadata.cover) {
+        coverBlobId = uid();
+        await db.blobs.put({ id: coverBlobId, blob: metadata.cover, kind: 'cover' });
+      }
+      await db.transaction('rw', db.epubFiles, db.books, async () => {
+        await db.epubFiles.put({ id: fileId, name: file.name, blob: file, addedAt: Date.now(), progress: book.progress });
+        await db.books.update(book.id, { fileId, coverBlobId, updatedAt: Date.now() });
+      });
+      setHasEpub(true);
+      setNotice(book.fileId ? 'epub 파일을 새 판으로 바꿨습니다. 독서 기록은 유지됩니다.' : 'epub 파일을 다시 연결했습니다.');
+      await onRefresh();
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'epub 파일을 읽지 못했습니다.'); }
+    if (replaceFileRef.current) replaceFileRef.current.value = '';
+  }
+
+  async function toggleEditNote(note: EditNote) {
+    await db.editNotes.update(note.id, { status: note.status === 'todo' ? 'done' : 'todo' });
+    await onRefresh();
+  }
+
   return <div className="page detail-page">
     <button className="back" onClick={onBack}>← 서재</button>
     <section className="book-hero">
       <Cover book={book} />
       <div><span className="eyebrow">{sourceLabels[book.source]}{book.category ? ` · ${book.category}` : ''}</span><h1>{book.title}</h1><p>{book.author || '저자 미상'}</p><Progress book={book} /><span className="page-count">{book.currentPage ?? 0} / {book.totalPages ?? '?'}쪽</span></div>
     </section>
-    <div className="detail-actions"><button className="primary" onClick={book.status === 'reading' ? onStart : cycleStatus}>{book.status === 'want' ? '독서 시작' : book.status === 'reading' ? '이어 읽기' : '다시 읽기'}</button><button onClick={() => onModal('edit-book')}>정보 수정</button></div>
+    <div className="detail-actions"><button className="primary" onClick={book.source === 'own-epub' ? () => onRead() : book.status === 'reading' ? onStart : cycleStatus}>{book.source === 'own-epub' ? '읽기' : book.status === 'want' ? '독서 시작' : book.status === 'reading' ? '이어 읽기' : '다시 읽기'}</button><button onClick={() => onModal('edit-book')}>정보 수정</button>{book.source === 'own-epub' && <button onClick={() => replaceFileRef.current?.click()}>{hasEpub ? 'epub 파일 바꾸기' : 'epub 파일 다시 넣기'}</button>}<input ref={replaceFileRef} className="visually-hidden" type="file" accept="application/epub+zip,.epub" onChange={(event) => void replaceEpub(event.target.files?.[0])} /></div>
+    {book.source === 'own-epub' && !hasEpub && <p className="missing-epub" role="status">epub 파일 다시 넣기 필요</p>}
     <div className="segmented detail-tabs"><button className={subtab === 'info' ? 'active' : ''} onClick={() => setSubtab('info')}>상세 정보</button><button className={subtab === 'records' ? 'active' : ''} onClick={() => setSubtab('records')}>기록 {bookSessions.length + bookQuotes.length}</button></div>
     {subtab === 'info' ? <section className="info-card">
       <div><span>상태</span><strong>{statusLabels[book.status]}</strong></div><div><span>별점</span><strong>{book.rating ? '★'.repeat(book.rating) : '아직 없음'}</strong></div><div><span>인생책</span><strong>{book.isLifeBook ? '내 인생책' : '표시 안 함'}</strong></div><div><span>출판사</span><strong>{book.publisher || '정보 없음'}</strong></div><div className="wide"><span>ISBN</span><strong>{book.isbn || '정보 없음'}</strong></div><div className="wide"><span>한 줄 후기</span><p>{book.review || '아직 남긴 후기가 없어요.'}</p></div>
@@ -329,9 +410,10 @@ function BookDetail({ book, sessions, quotes, onBack, onRefresh, onStart, onModa
       <div className="button-row"><button onClick={() => onModal('manual-session')}>＋ 독서 기록</button><button onClick={() => onModal('quote')}>＋ 문장 추가</button></div>
       {timeline.length ? timeline.map((entry) => <article key={`${entry.kind}-${entry.item.id}`} className="timeline-item">
         <div className="timeline-dot" />
-        <div>{entry.kind === 'session' ? <><strong>{Math.max(1, Math.round(entry.item.activeSec / 60))}분 · {entry.item.pageFrom ? `p.${entry.item.pageFrom}` : '시작'}–{entry.item.pageTo ? `p.${entry.item.pageTo}` : '끝'}</strong><p>{entry.item.note || (entry.item.mode === 'manual' ? '수동 독서 기록' : '타이머 독서 기록')}</p></> : <><strong>“{entry.item.text}”</strong><p>{entry.item.page ? `p.${entry.item.page}` : '쪽수 없음'}{entry.item.memo ? ` · ${entry.item.memo}` : ''}</p></>}<small>{formatDateTime(entry.at)}</small></div>
+        <div>{entry.kind === 'session' ? <><strong>{Math.max(1, Math.round(entry.item.activeSec / 60))}분 · {entry.item.pageFrom ? `p.${entry.item.pageFrom}` : '시작'}–{entry.item.pageTo ? `p.${entry.item.pageTo}` : '끝'}</strong><p>{entry.item.note || (entry.item.mode === 'manual' ? '수동 독서 기록' : entry.item.mode === 'reader-auto' ? 'epub 자동 독서 기록' : '타이머 독서 기록')}</p></> : <>{entry.item.cfi ? <button className="quote-location" onClick={() => onRead(entry.item.cfi)}><strong>“{entry.item.text}”</strong></button> : <strong>“{entry.item.text}”</strong>}<p>{entry.item.page ? `p.${entry.item.page}` : entry.item.cfi ? 'epub 위치 연결됨' : '쪽수 없음'}{entry.item.memo ? ` · ${entry.item.memo}` : ''}</p></>}<small>{formatDateTime(entry.at)}</small></div>
         <div className="timeline-actions"><button className="text-button" onClick={() => setEditing(entry)}>수정</button><button className="text-button" onClick={() => void removeTimeline(entry.kind, entry.item.id)}>삭제</button></div>
       </article>) : <p className="empty-copy">독서 기록과 문장을 날짜순으로 모아 보여 드려요.</p>}
+      {book.source === 'own-epub' && <section className="edit-notes"><h2>퇴고 메모</h2>{bookEditNotes.length ? bookEditNotes.map((note) => <article key={note.id}><button className="note-location" onClick={() => onRead(note.cfi)}><strong>{note.selectedText}</strong><span>{note.memo || '메모 없음'}</span></button><button onClick={() => void toggleEditNote(note)}>{note.status === 'todo' ? '완료로 표시' : '할 일로 되돌리기'}</button></article>) : <p>아직 퇴고 메모가 없어요.</p>}</section>}
     </section>}
     {editing && <TimelineEditDialog entry={editing} onClose={() => setEditing(undefined)} onSaved={async () => { await onRefresh(); setEditing(undefined); }} />}
   </div>;
@@ -396,11 +478,11 @@ function Calendar({ books, sessions, onOpenBook }: { books: Book[]; sessions: Se
   </div>;
 }
 
-function QuotesView({ books, quotes, onOpenBook }: { books: Book[]; quotes: Quote[]; onOpenBook: (book: Book) => void }) {
+function QuotesView({ books, quotes, onOpenBook, onOpenReader }: { books: Book[]; quotes: Quote[]; onOpenBook: (book: Book) => void; onOpenReader: (book: Book, cfi: string) => void }) {
   const sorted = [...quotes].sort((a, b) => b.createdAt - a.createdAt);
   return <div className="page quotes-page"><div className="page-heading"><div><small>직접 담은 문장</small><h1>필사함</h1></div><span className="count-badge">{quotes.length}개</span></div>
-    <p className="stage-note">1단계에서는 직접 입력한 문장을 모아 봅니다. 이미지 OCR과 카드 저장은 다음 단계에서 추가됩니다.</p>
-    {sorted.length ? <div className="quote-list">{sorted.map((quote) => { const book = books.find((b) => b.id === quote.bookId); return <button key={quote.id} onClick={() => book && onOpenBook(book)}><blockquote>“{quote.text}”</blockquote><span>{book?.title ?? '알 수 없는 책'}{quote.page ? ` · p.${quote.page}` : ''}</span></button>; })}</div> : <div className="empty-state"><b>아직 담은 문장이 없어요.</b><span>독서 중 ‘문장 담기’로 마음에 남은 구절을 기록하세요.</span></div>}
+    <p className="stage-note">직접 입력하거나 epub 본문에서 선택한 문장을 모아 봅니다.</p>
+    {sorted.length ? <div className="quote-list">{sorted.map((quote) => { const book = books.find((b) => b.id === quote.bookId); return <button key={quote.id} onClick={() => { if (!book) return; if (quote.cfi && book.source === 'own-epub') onOpenReader(book, quote.cfi); else onOpenBook(book); }}><blockquote>“{quote.text}”</blockquote><span>{book?.title ?? '알 수 없는 책'}{quote.page ? ` · p.${quote.page}` : quote.cfi ? ' · epub 위치' : ''}</span></button>; })}</div> : <div className="empty-state"><b>아직 담은 문장이 없어요.</b><span>독서 중 ‘문장 담기’로 마음에 남은 구절을 기록하세요.</span></div>}
   </div>;
 }
 
@@ -410,6 +492,7 @@ function Settings({ themeId, setThemeId, onImported, setNotice }: { themeId: str
   const [kakaoKey, setKakaoKey] = useState('');
   const [showKakaoKey, setShowKakaoKey] = useState(false);
   const [kakaoResult, setKakaoResult] = useState('');
+  const [includeEpubFiles, setIncludeEpubFiles] = useState(false);
   useEffect(() => { void db.preferences.get('kakaoRestKey').then((item) => setKakaoKey(typeof item?.value === 'string' ? item.value : '')); }, []);
   async function requestPersist() {
     // DEVICE-CHECK: BOOX 브라우저에서 허용 여부와 재부팅 뒤 유지 여부를 확인한다.
@@ -418,7 +501,7 @@ function Settings({ themeId, setThemeId, onImported, setNotice }: { themeId: str
     setPersistResult(granted ? '영구 저장이 허용되었습니다.' : '브라우저가 영구 저장을 허용하지 않았습니다.');
   }
   async function downloadBackup() {
-    const blob = await exportBackup();
+    const blob = await exportBackup(includeEpubFiles);
     const fileName = `nyang-seojae-${new Date().toISOString().slice(0, 10)}.json`;
     // 안드로이드 앱(android/) 안에서는 WebView 가 blob 다운로드를 못 하므로 앱이 넣어 준 저장 통로를 쓴다.
     const bridge = (window as unknown as { NyangAndroid?: { saveFile(name: string, mime: string, base64: string): boolean } }).NyangAndroid;
@@ -467,10 +550,37 @@ function Settings({ themeId, setThemeId, onImported, setNotice }: { themeId: str
   return <div className="page settings-page"><div className="page-heading"><div><small>기기와 서재 관리</small><h1>설정</h1></div></div>
     <section className="settings-card"><h2>방 테마</h2><div className="theme-list">{themeData.themes.map((theme) => <button key={theme.id} className={theme.id === themeId ? 'active' : ''} onClick={() => void setThemeId(theme.id)}><img src={`${import.meta.env.BASE_URL}art/${theme.file}`} alt="" /><span>{theme.name}</span></button>)}</div><h3>고양이 자세 미리보기</h3><div className="pose-list">{poses.map((pose) => <figure key={pose}><img src={`${import.meta.env.BASE_URL}art/cat/${alignData.sprites[pose].file}`} alt="" /><figcaption>{{ reading: '읽는 중', resting: '쉬는 중', idle: '대기', sleeping: '자는 중' }[pose]}</figcaption></figure>)}</div></section>
     <section className="settings-card"><h2>책 검색(카카오)</h2><p>키는 이 기기에만 저장되고 백업 파일에도 들어가지 않습니다.</p><div className="secret-row"><label>REST API 키<input type={showKakaoKey ? 'text' : 'password'} value={kakaoKey} onChange={(event) => setKakaoKey(event.target.value)} autoComplete="off" /></label><button onClick={() => setShowKakaoKey((value) => !value)}>{showKakaoKey ? '숨기기' : '보기'}</button></div><div className="button-row"><button onClick={() => void saveKakaoKey()}>저장</button><button onClick={() => void clearKakaoKey()}>지우기</button><button onClick={() => void testKakaoConnection()}>연결 시험</button></div>{kakaoResult && <p className="result-text" role="status">{kakaoResult}</p>}</section>
-    <section className="settings-card"><h2>내 데이터</h2><p>책, 기록, 문장과 표지를 JSON 파일 하나로 보관합니다.</p><div className="button-row"><button onClick={() => void downloadBackup()}>백업 내보내기</button><button onClick={() => fileRef.current?.click()}>백업 가져오기</button></div><input className="visually-hidden" ref={fileRef} type="file" accept="application/json,.json" onChange={(e) => void restore(e.target.files?.[0])} /></section>
+    <ReaderKeySettings setNotice={setNotice} />
+    <section className="settings-card"><h2>내 데이터</h2><p>책, 기록, 문장과 표지를 JSON 파일 하나로 보관합니다.</p><label className="check"><input type="checkbox" checked={includeEpubFiles} onChange={(event) => setIncludeEpubFiles(event.target.checked)} /> epub 파일 포함(백업 파일이 커질 수 있어요)</label><div className="button-row"><button onClick={() => void downloadBackup()}>백업 내보내기</button><button onClick={() => fileRef.current?.click()}>백업 가져오기</button></div><input className="visually-hidden" ref={fileRef} type="file" accept="application/json,.json" onChange={(e) => void restore(e.target.files?.[0])} /></section>
     <section className="settings-card"><h2>저장소 보호</h2><p>브라우저가 공간을 정리할 때 냥서재 데이터를 지우지 않도록 요청합니다.</p><button onClick={() => void requestPersist()}>영구 보관 요청</button>{persistResult && <p className="result-text">{persistResult}</p>}</section>
     <KeyTester />
   </div>;
+}
+
+function ReaderKeySettings({ setNotice }: { setNotice: (message: string) => void }) {
+  const [keys, setKeys] = useState<ReaderKeys>({ next: ['PageDown', 'ArrowRight', 'ArrowDown', ' ', 'Space'], previous: ['PageUp', 'ArrowLeft', 'ArrowUp'], swapped: false });
+  const [capturing, setCapturing] = useState<'next' | 'previous'>();
+  useEffect(() => { void db.preferences.get('readerKeys').then((item) => { if (item?.value) setKeys((current) => ({ ...current, ...(item.value as Partial<ReaderKeys>) })); }); }, []);
+  useEffect(() => {
+    if (!capturing) return;
+    const listener = (event: KeyboardEvent) => {
+      event.preventDefault();
+      const value = event.code || event.key;
+      const next = { ...keys, [capturing]: [value] };
+      setKeys(next);
+      setCapturing(undefined);
+      void db.preferences.put({ key: 'readerKeys', value: next });
+      setNotice(`${capturing === 'next' ? '다음' : '이전'} 버튼을 ${value}(으)로 지정했습니다.`);
+    };
+    window.addEventListener('keydown', listener, { once: true });
+    return () => window.removeEventListener('keydown', listener);
+  }, [capturing, keys, setNotice]);
+  async function toggleSwap() {
+    const next = { ...keys, swapped: !keys.swapped };
+    setKeys(next);
+    await db.preferences.put({ key: 'readerKeys', value: next });
+  }
+  return <section className="settings-card"><h2>뷰어 버튼</h2>{/* DEVICE-CHECK: BOOX 물리 버튼으로 앞/뒤 넘김이 되는지, 방향이 맞는지 */}<label className="check"><input type="checkbox" checked={keys.swapped} onChange={() => void toggleSwap()} /> 앞/뒤 바꾸기</label><p>기본 다음: PageDown, →, ↓, Space<br />기본 이전: PageUp, ←, ↑</p><div className="button-row"><button onClick={() => setCapturing('next')}>{capturing === 'next' ? '다음 키를 눌러 주세요' : `다음 직접 지정: ${keys.next.join(', ')}`}</button><button onClick={() => setCapturing('previous')}>{capturing === 'previous' ? '이전 키를 눌러 주세요' : `이전 직접 지정: ${keys.previous.join(', ')}`}</button></div></section>;
 }
 
 function KeyTester() {
@@ -486,8 +596,10 @@ function KeyTester() {
   return <section className="settings-card key-tester"><h2>기기 버튼 시험</h2><p>시험 모드에서는 키의 기본 동작을 막지 않고 최근 입력 10개를 보여 줍니다.</p>{active ? <><button onClick={() => setActive(false)}>시험 끝</button><ol>{events.map((item, index) => <li key={`${item.code}-${index}`}><code>key={item.key} · code={item.code} · keyCode={item.keyCode}</code></li>)}</ol></> : <button className="device-test-start" onClick={() => { setEvents([]); setActive(true); }}>기기 버튼 시험 시작</button>}</section>;
 }
 
-function BookForm({ book, onClose, onSaved, onOpenSettings }: { book?: Book; onClose: () => void; onSaved: () => Promise<void>; onOpenSettings: () => void }) {
+function BookForm({ book, onClose, onSaved, onOpenSettings, onOpenBook, setNotice }: { book?: Book; onClose: () => void; onSaved: () => Promise<void>; onOpenSettings: () => void; onOpenBook: (book: Book) => void; setNotice: (message: string) => void }) {
   const [cover, setCover] = useState<File>();
+  const [epubDraft, setEpubDraft] = useState<{ file: File; cover?: Blob }>();
+  const [epubMessage, setEpubMessage] = useState('');
   const formRef = useRef<HTMLFormElement>(null);
   const [metadata, setMetadata] = useState<Pick<Book, 'publisher' | 'isbn' | 'publishedYear' | 'coverUrl'>>({ publisher: book?.publisher, isbn: book?.isbn, publishedYear: book?.publishedYear, coverUrl: book?.coverUrl });
   function applySearchResult(result: KakaoBookResult) {
@@ -499,6 +611,36 @@ function BookForm({ book, onClose, onSaved, onOpenSettings }: { book?: Book; onC
     if (author instanceof HTMLInputElement) author.value = result.author ?? '';
     setMetadata({ publisher: result.publisher, isbn: result.isbn, publishedYear: result.publishedYear, coverUrl: result.coverUrl });
   }
+  async function chooseEpub(file?: File) {
+    if (!file) return;
+    setEpubMessage('epub 정보를 읽는 중…');
+    try {
+      const existingFile = (await db.epubFiles.toArray()).find((item) => item.name === file.name && item.blob.size === file.size);
+      if (existingFile) {
+        const existingBook = await db.books.filter((item) => item.fileId === existingFile.id).first();
+        if (existingBook) {
+          setNotice('이미 있는 책입니다. 기존 책을 열었습니다.');
+          onClose();
+          onOpenBook(existingBook);
+          return;
+        }
+      }
+      const metadataResult = await readEpubMetadata(file);
+      const form = formRef.current;
+      if (form) {
+        const title = form.elements.namedItem('title');
+        const author = form.elements.namedItem('author');
+        const source = form.elements.namedItem('source');
+        const status = form.elements.namedItem('status');
+        if (title instanceof HTMLInputElement) title.value = metadataResult.title;
+        if (author instanceof HTMLInputElement) author.value = metadataResult.author ?? '';
+        if (source instanceof HTMLSelectElement) source.value = 'own-epub';
+        if (status instanceof HTMLSelectElement) status.value = 'reading';
+      }
+      setEpubDraft({ file, cover: metadataResult.cover });
+      setEpubMessage(`epub에서 제목${metadataResult.author ? '·저자' : ''}${metadataResult.cover ? '·표지' : ''}를 채웠습니다. 수정한 뒤 저장하세요.`);
+    } catch (error) { setEpubMessage(error instanceof Error ? error.message : 'epub 파일을 읽지 못했습니다.'); }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -506,8 +648,10 @@ function BookForm({ book, onClose, onSaved, onOpenSettings }: { book?: Book; onC
     const totalPages = parseOptionalNumber(data.get('totalPages'));
     const currentPage = parseOptionalNumber(data.get('currentPage'));
     let coverBlobId = book?.coverBlobId;
-    if (cover) { coverBlobId = uid(); await db.blobs.put({ id: coverBlobId, blob: cover, kind: 'cover' }); }
+    const selectedCover = cover ?? epubDraft?.cover;
+    if (selectedCover) { coverBlobId = uid(); await db.blobs.put({ id: coverBlobId, blob: selectedCover, kind: 'cover' }); }
     const status = String(data.get('status')) as BookStatus;
+    const fileId = epubDraft ? uid() : book?.fileId;
     const next: Book = {
       ...book,
       id: book?.id ?? uid(), title: String(data.get('title')).trim(), author: String(data.get('author')).trim() || undefined,
@@ -515,12 +659,17 @@ function BookForm({ book, onClose, onSaved, onOpenSettings }: { book?: Book; onC
       publisher: metadata.publisher, isbn: metadata.isbn, publishedYear: metadata.publishedYear, coverUrl: metadata.coverUrl,
       totalPages, currentPage, progress: resolveProgress({ progressInput: '', pageTo: currentPage, totalPages, previousProgress: book?.progress, done: status === 'done' }),
       rating: Number(data.get('rating')) || undefined, review: String(data.get('review')).trim() || undefined,
-      isLifeBook: data.get('isLifeBook') === 'on', coverBlobId, createdAt: book?.createdAt ?? timestamp, updatedAt: timestamp,
+      isLifeBook: data.get('isLifeBook') === 'on', coverBlobId, fileId, createdAt: book?.createdAt ?? timestamp, updatedAt: timestamp,
       finishedAt: status === 'done' ? (book?.finishedAt ?? timestamp) : undefined
     };
-    await db.books.put(next); await onSaved(); onClose();
+    await db.transaction('rw', db.books, db.epubFiles, async () => {
+      if (epubDraft && fileId) await db.epubFiles.put({ id: fileId, name: epubDraft.file.name, blob: epubDraft.file, addedAt: timestamp, progress: 0 });
+      await db.books.put(next);
+    });
+    await onSaved(); onClose();
   }
   return <Dialog title={book ? '책 정보 수정' : '책 추가'} onClose={onClose}><form ref={formRef} onSubmit={submit} className="form-grid">
+    {!book && <section className="epub-import wide"><strong>epub 파일로 추가</strong><input type="file" accept="application/epub+zip,.epub" onChange={(event) => void chooseEpub(event.target.files?.[0])} />{epubMessage && <p role="status">{epubMessage}</p>}</section>}
     <KakaoBookSearch onSelect={applySearchResult} onOpenSettings={onOpenSettings} />
     <label>제목<input name="title" defaultValue={book?.title} required /></label><label>저자<input name="author" defaultValue={book?.author} /></label>
     <label>상태<select name="status" defaultValue={book?.status ?? 'want'}>{Object.entries(statusLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
