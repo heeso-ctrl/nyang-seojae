@@ -90,6 +90,19 @@ export interface CoinLog { id: string; amount: number; reason: string; at: numbe
 export interface ActiveTimer { id: 'current'; bookId: string; startedAt: number; pauses: Pause[] }
 export interface Preference { key: string; value: unknown }
 
+export interface ReaderKeys {
+  next: string[];
+  previous: string[];
+  swapped: boolean;
+}
+
+export interface ReaderStyle {
+  fontSize: number;
+  lineHeight: number;
+  margin: number;
+  fontFamily: 'book' | 'serif' | 'sans';
+}
+
 export const sourceLabels: Record<BookSource, string> = {
   'own-epub': '내 글',
   'library-app': '도서관 전자책',

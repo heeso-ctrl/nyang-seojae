@@ -123,7 +123,7 @@ textarea { resize: vertical; }
 .book-hero h1 { margin: 5px 0; line-height: 1.12; }
 .book-hero p { color: var(--soft-ink); }
 .page-count { display: block; text-align: right; font-size: 12px; color: var(--soft-ink); }
-.detail-actions { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin: 20px 0; }
+.detail-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 20px 0; }
 .primary { background: var(--ink); color: #fff; }
 .detail-tabs { grid-template-columns: repeat(2, 1fr); }
 .info-card, .settings-card, .calendar-card { border: 1.5px solid var(--line); border-radius: var(--radius); background: var(--paper); padding: 16px; }
@@ -135,6 +135,12 @@ textarea { resize: vertical; }
 .timeline-dot { z-index: 1; width: 12px; height: 12px; margin-top: 5px; border: 2px solid var(--line); border-radius: 50%; background: var(--paper); }
 .timeline-item p { margin: 5px 0; color: var(--soft-ink); }.timeline-item small { color: var(--soft-ink); }.text-button { border: 0; background: transparent; color: #7a3934; padding: 0 8px; }
 .timeline-actions { display: flex; flex-direction: column; }
+.quote-location, .note-location { min-height: 48px; width: 100%; padding: 7px; border: 0; background: transparent; text-align: left; }
+.missing-epub { padding: 10px; border: 2px solid #8b3b2f; background: var(--paper); color: #702e29; font-weight: 800; }
+.edit-notes { margin-top: 24px; border-top: 2px solid var(--line); padding-top: 14px; }
+.edit-notes article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 8px 0; border-bottom: 1px solid #b8afa5; }
+.edit-notes .note-location { display: grid; gap: 4px; }
+.edit-notes .note-location span { color: var(--soft-ink); font-size: 12px; }
 
 .month-nav { display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; gap: 8px; }.month-nav h2 { margin: 0; text-align: center; }
 .weekdays, .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
@@ -157,6 +163,9 @@ textarea { resize: vertical; }
 .key-tester ol { margin: 12px 0 0; padding-left: 24px; }
 .key-tester li { padding: 5px 0; overflow-wrap: anywhere; }
 .book-search { padding: 10px; border: 1px solid var(--line); background: var(--paper); }
+.epub-import { padding: 12px; border: 2px solid var(--line); background: var(--sage); }
+.epub-import input { margin-top: 8px; background: var(--paper); }
+.epub-import p { margin: 8px 0 0; }
 .book-search p { margin: 7px 0; color: var(--soft-ink); }
 .book-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 7px; }
 .search-results { display: grid; gap: 6px; max-height: 288px; margin-top: 8px; overflow-y: auto; }
@@ -171,6 +180,31 @@ textarea { resize: vertical; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }.modal-head h2 { margin: 0; font-family: Georgia, "Batang", serif; font-size: 25px; }.modal-head button { width: 48px; font-size: 24px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }.form-actions { display: flex; justify-content: flex-end; gap: 8px; }.form-actions button { padding-inline: 18px; }.form-actions.spread { justify-content: space-between; }.form-actions.spread span { display: flex; gap: 8px; }.form-intro { padding: 10px; border: 1px solid var(--line); background: var(--paper); }.danger { color: #702e29; border-color: #702e29; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
+
+/* 2단계 epub 뷰어: 단색 면과 선만 사용하고 모든 조작 영역을 48px 이상으로 둔다. */
+.reader-screen { position: fixed; z-index: 100; inset: 0; overflow: hidden; background: #fffdf6; color: var(--ink); }
+.reader-mount { position: absolute; inset: 0; }
+.reader-mount foliate-view { display: block; width: 100%; height: 100%; background: #fffdf6; }
+.reader-toolbar { position: absolute; z-index: 110; left: 0; right: 0; min-height: 58px; display: grid; align-items: center; gap: 6px; border-color: var(--line); background: var(--paper); }
+.reader-toolbar button { min-width: 48px; border-radius: 0; }
+.reader-topbar { top: 0; grid-template-columns: auto minmax(0, 1fr) auto auto; border-bottom: 2px solid var(--line); padding: 5px; }
+.reader-topbar strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.reader-bottombar { bottom: 0; grid-template-columns: minmax(0, 1fr) minmax(90px, auto); border-top: 2px solid var(--line); padding: 5px 10px; }
+.reader-bottombar label { grid-template-columns: auto minmax(80px, 1fr); align-items: center; }
+.reader-bottombar input { min-height: 48px; padding: 0; }
+.reader-bottombar > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.reader-panel { position: absolute; z-index: 120; top: 58px; right: 0; bottom: 58px; width: min(88%, 390px); overflow-y: auto; padding: 16px; border-left: 2px solid var(--line); background: var(--cream); }
+.reader-panel h2 { margin-bottom: 12px; }
+.reader-panel ol { margin: 0; padding-left: 18px; }
+.reader-panel li { margin-bottom: 5px; }
+.reader-panel li button { width: 100%; text-align: left; }
+.reader-style { display: grid; align-content: start; gap: 12px; }
+.selection-actions { position: fixed; z-index: 130; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px; border: 2px solid var(--ink); background: var(--paper); }
+.selection-actions button { border-radius: 0; white-space: nowrap; }
+.reader-dialog { position: fixed; z-index: 140; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(calc(100% - 24px), 520px); padding: 18px; border: 2px solid var(--ink); background: var(--cream); }
+.reader-dialog p { max-height: 140px; overflow-y: auto; padding: 9px; border: 1px solid var(--line); background: var(--paper); }
+.reader-dialog > div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.reader-error { position: fixed; z-index: 150; inset: 20%; display: grid; place-content: center; gap: 12px; padding: 20px; border: 2px solid #8b3b2f; background: var(--paper); text-align: center; }
 
 @media (min-width: 700px) {
   .page { padding-inline: 30px; }
