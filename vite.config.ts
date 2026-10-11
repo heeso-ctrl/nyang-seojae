@@ -16,6 +16,10 @@ export default defineConfig({
         theme_color: '#f5f0e5',
         background_color: '#f5f0e5',
         display: 'standalone',
+        // 앱 신분값. BOOX에서 앱을 지운 뒤 Chrome이 '이미 설치됨'으로 잘못 알아 재설치가 막혀서 새 값으로 바꿈.
+        // 사이트 주소(저장소 위치)는 그대로라 기록 데이터는 그대로 이어진다. 이 값은 앞으로 바꾸지 않는다.
+        // DEVICE-CHECK: 바꾼 뒤 Chrome '설치 및 바로가기 만들기'에 설치 버튼이 다시 나오는지
+        id: './?app=nyang-seojae-2',
         start_url: './',
         lang: 'ko-KR',
         icons: [
