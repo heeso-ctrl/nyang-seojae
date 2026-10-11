@@ -1,0 +1,36 @@
+name: 안드로이드 앱 빌드
+
+on:
+  push:
+    branches: [main, android-app]
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - run: gradle -p android assembleRelease --no-daemon --stacktrace
+      - run: cp android/app/build/outputs/apk/release/app-release.apk nyang-seojae.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nyang-seojae-apk
+          path: nyang-seojae.apk
+      - name: main 이면 릴리스(android-latest)에 올리기
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view android-latest >/dev/null 2>&1 || gh release create android-latest --title "냥서재 안드로이드 앱 (최신)" --notes "main 에 android/ 변경이 들어올 때마다 자동으로 다시 만들어지는 개인용 설치 파일입니다."
+          gh release upload android-latest nyang-seojae.apk --clobber

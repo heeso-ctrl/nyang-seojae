@@ -1,0 +1,39 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'io.github.heesoctrl.nyangseojae'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'io.github.heesoctrl.nyangseojae'
+        minSdk 29
+        targetSdk 34
+        // GitHub Actions 실행 번호를 버전 번호로 써서 새 빌드가 항상 위에 덮어 설치되게 한다.
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer)
+        versionName '1.0.' + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+
+    signingConfigs {
+        // 개인용 사이드로드 앱 서명. 같은 키로 서명해야 업데이트 때 기존 앱(과 기록)을 지우지 않고 덮어 설치된다.
+        release {
+            storeFile file('../keystore/nyang-seojae.jks')
+            storePassword 'nyangseojae'
+            keyAlias 'nyang'
+            keyPassword 'nyangseojae'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

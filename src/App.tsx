@@ -419,10 +419,19 @@ function Settings({ themeId, setThemeId, onImported, setNotice }: { themeId: str
   }
   async function downloadBackup() {
     const blob = await exportBackup();
+    const fileName = `nyang-seojae-${new Date().toISOString().slice(0, 10)}.json`;
+    // 안드로이드 앱(android/) 안에서는 WebView 가 blob 다운로드를 못 하므로 앱이 넣어 준 저장 통로를 쓴다.
+    const bridge = (window as unknown as { NyangAndroid?: { saveFile(name: string, mime: string, base64: string): boolean } }).NyangAndroid;
+    if (bridge) {
+      const base64 = await blobToBase64(blob);
+      // DEVICE-CHECK: 안드로이드 앱에서 백업 파일이 '다운로드/냥서재' 폴더에 저장되는지
+      setNotice(bridge.saveFile(fileName, 'application/json', base64) ? '백업 파일을 다운로드/냥서재 폴더에 저장했습니다.' : '백업 파일을 저장하지 못했습니다.');
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `nyang-seojae-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.download = fileName;
     document.body.append(anchor);
     // DEVICE-CHECK: BOOX 기본 브라우저에서 JSON 파일이 다운로드 폴더에 저장되는지
     anchor.click();
@@ -606,3 +615,11 @@ function formatDateTime(timestamp: number): string { return new Intl.DateTimeFor
 function toLocalInput(timestamp: number): string { const d = new Date(timestamp - new Date(timestamp).getTimezoneOffset() * 60_000); return d.toISOString().slice(0, 16); }
 
 export default App;
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}

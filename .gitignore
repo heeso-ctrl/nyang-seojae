@@ -4,3 +4,7 @@ outputs/
 *.tsbuildinfo
 *.log
 .DS_Store
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
