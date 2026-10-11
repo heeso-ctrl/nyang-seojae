@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { db } from './db';
 import { ensureFoliate, readerCss, type FoliateRelocate, type FoliateTocItem, type FoliateViewElement } from './epub';
 import { finishReaderClock, readerAutoPause, readerInput, readerVisibility, READER_IDLE_MS, type ReaderClock } from './readerSession';
+import { readerTapRatio } from './readerTap';
 import type { ActiveTimer, Book, EditNote, EpubFile, Quote, ReaderKeys, ReaderStyle } from './types';
 
 const DEFAULT_KEYS: ReaderKeys = {
@@ -103,6 +104,7 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
     let live = true;
     let view: FoliateViewElement | undefined;
     const listeners: Array<() => void> = [];
+    const selectionTimers = new Set<number>();
     void (async () => {
       try {
         const [keysPref, stylePref, quotes, editNotes] = await Promise.all([
@@ -156,11 +158,20 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
           const { doc, index } = detail;
           const keyListener = (e: KeyboardEvent) => handleKey(e);
           const scrollListener = () => markInput();
-          const pointerListener = () => window.setTimeout(() => handleSelection(doc, index), 0);
+          const pointerListener = () => {
+            const timer = window.setTimeout(() => {
+              selectionTimers.delete(timer);
+              if (live) handleSelection(doc, index);
+            }, 0);
+            selectionTimers.add(timer);
+          };
           const clickListener = (e: MouseEvent) => {
             if (doc.getSelection()?.type === 'Range' || (e.target as Element | null)?.closest?.('a')) return;
             markInput();
-            const ratio = e.clientX / Math.max(1, doc.documentElement.clientWidth);
+            const frame = doc.defaultView?.frameElement as HTMLElement | null;
+            const frameRect = frame?.getBoundingClientRect();
+            const viewerRect = view?.getBoundingClientRect() ?? mountRef.current?.getBoundingClientRect();
+            const ratio = readerTapRatio(e.clientX, doc.documentElement.clientWidth, frameRect, viewerRect);
             if (ratio < 1 / 3) turn('previous');
             else if (ratio > 2 / 3) turn('next');
             else setToolsVisible((value) => !value);
@@ -208,24 +219,29 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
           window.removeEventListener('keydown', handleKey);
         });
         await view.open(new File([epubFile.blob], epubFile.name, { type: epubFile.blob.type || 'application/epub+zip' }));
+        if (!live) return;
         view.renderer.setAttribute('flow', 'paginated');
         view.renderer.setAttribute('margin', `${styleRef.current.margin}px`);
         view.renderer.removeAttribute('animated');
         setToc(view.book.toc ?? []);
         await view.init({ lastLocation: initialCfi ?? epubFile.lastCfi, showTextStart: true });
-        scheduleIdle();
+        if (live) scheduleIdle();
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : 'epub을 열지 못했습니다.');
+        if (live) setError(reason instanceof Error ? reason.message : 'epub을 열지 못했습니다.');
       }
     })();
     return () => {
       live = false;
+      viewRef.current = undefined;
       listeners.forEach((remove) => remove());
+      selectionTimers.forEach((timer) => window.clearTimeout(timer));
+      selectionTimers.clear();
       if (idleRef.current) window.clearTimeout(idleRef.current);
+      idleRef.current = undefined;
       if (persistTimerRef.current) window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = undefined;
       view?.close();
       view?.remove();
-      viewRef.current = undefined;
     };
   }, [book.id, epubFile.blob, epubFile.lastCfi, epubFile.name, initialCfi, markInput, persistLocation, scheduleIdle, turn]);
 

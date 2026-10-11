@@ -218,6 +218,7 @@ class View {
     #column = true
     #size
     #layout = {}
+    #destroyed = false
     constructor({ container, onExpand }) {
         this.container = container
         this.onExpand = onExpand
@@ -254,6 +255,10 @@ class View {
         if (typeof src !== 'string') throw new Error(`${src} is not string`)
         return new Promise(resolve => {
             this.#iframe.addEventListener('load', () => {
+                if (this.#destroyed) {
+                    resolve()
+                    return
+                }
                 const doc = this.document
                 afterLoad?.(doc)
 
@@ -275,7 +280,9 @@ class View {
                 // the resize observer above doesn't work in Firefox
                 // (see https://bugzilla.mozilla.org/show_bug.cgi?id=1832939)
                 // until the bug is fixed we can at least account for font load
-                doc.fonts.ready.then(() => this.expand())
+                doc.fonts.ready.then(() => {
+                    if (!this.#destroyed) this.expand()
+                })
 
                 resolve()
             }, { once: true })
@@ -360,7 +367,9 @@ class View {
         }
     }
     expand() {
-        const { documentElement } = this.document
+        const doc = this.document
+        if (this.#destroyed || !doc) return
+        const { documentElement } = doc
         if (this.#column) {
             const side = this.#vertical ? 'height' : 'width'
             const otherSide = this.#vertical ? 'width' : 'height'
@@ -416,7 +425,8 @@ class View {
         return this.#overlayer
     }
     destroy() {
-        if (this.document) this.#observer.unobserve(this.document.body)
+        this.#destroyed = true
+        this.#observer.disconnect()
     }
 }
 
@@ -427,7 +437,10 @@ export class Paginator extends HTMLElement {
         'max-inline-size', 'max-block-size', 'max-column-count',
     ]
     #root = this.attachShadow({ mode: 'closed' })
-    #observer = new ResizeObserver(() => this.render())
+    #destroyed = false
+    #observer = new ResizeObserver(() => {
+        if (!this.#destroyed) this.render()
+    })
     #top
     #background
     #container
@@ -664,6 +677,7 @@ export class Paginator extends HTMLElement {
         })
     }
     #createView() {
+        if (this.#destroyed) return
         if (this.#view) {
             this.#view.destroy()
             this.#container.removeChild(this.#view.element)
@@ -752,7 +766,7 @@ export class Paginator extends HTMLElement {
         return { height, width, margin, gap, columnWidth }
     }
     render() {
-        if (!this.#view) return
+        if (this.#destroyed || !this.#view) return
         this.#view.render(this.#beforeRender({
             vertical: this.#vertical,
             rtl: this.#rtl,
@@ -919,6 +933,7 @@ export class Paginator extends HTMLElement {
         return this.#scrollToAnchor(anchor, select ? 'selection' : 'navigation')
     }
     async #scrollToAnchor(anchor, reason = 'anchor') {
+        if (this.#destroyed || !this.#view) return
         this.#anchor = anchor
         const rects = uncollapse(anchor)?.getClientRects?.()
         // if anchor is an element or a range
@@ -970,6 +985,7 @@ export class Paginator extends HTMLElement {
     }
     async #display(promise) {
         const { index, src, anchor, onLoad, select } = await promise
+        if (this.#destroyed) return
         this.#index = index
         const hasFocus = this.#view?.document?.hasFocus()
         if (src) {
@@ -986,6 +1002,7 @@ export class Paginator extends HTMLElement {
             }
             const beforeRender = this.#beforeRender.bind(this)
             await view.load(src, afterLoad, beforeRender)
+            if (this.#destroyed) return
             this.dispatchEvent(new CustomEvent('create-overlayer', {
                 detail: {
                     doc: view.document, index,
@@ -994,6 +1011,7 @@ export class Paginator extends HTMLElement {
             }))
             this.#view = view
         }
+        if (this.#destroyed || !this.#view?.document) return
         await this.scrollToAnchor((typeof anchor === 'function'
             ? anchor(this.#view.document) : anchor) ?? 0, select)
         if (hasFocus) this.focusView()
@@ -1002,6 +1020,7 @@ export class Paginator extends HTMLElement {
         return index >= 0 && index <= this.sections.length - 1
     }
     async #goTo({ index, anchor, select}) {
+        if (this.#destroyed) return
         if (index === this.#index) await this.#display({ index, anchor, select })
         else {
             const oldIndex = this.#index
@@ -1058,10 +1077,11 @@ export class Paginator extends HTMLElement {
             if (this.sections[index]?.linear !== 'no') return index
     }
     async #turnPage(dir, distance) {
-        if (this.#locked) return
+        if (this.#destroyed || this.#locked) return
         this.#locked = true
         const prev = dir === -1
         const shouldGo = await (prev ? this.#scrollPrev(distance) : this.#scrollNext(distance))
+        if (this.#destroyed) return
         if (shouldGo) await this.#goTo({
             index: this.#adjacentIndex(dir),
             anchor: prev ? () => 1 : () => 0,
@@ -1109,20 +1129,27 @@ export class Paginator extends HTMLElement {
         } else $style.textContent = styles
 
         // NOTE: needs `requestAnimationFrame` in Chromium
-        requestAnimationFrame(() =>
-            this.#background.style.background = getBackground(this.#view.document))
+        const view = this.#view
+        requestAnimationFrame(() => {
+            if (!this.#destroyed && view === this.#view && view?.document)
+                this.#background.style.background = getBackground(view.document)
+        })
 
         // needed because the resize observer doesn't work in Firefox
-        this.#view?.document?.fonts?.ready?.then(() => this.#view.expand())
+        view?.document?.fonts?.ready?.then(() => {
+            if (!this.#destroyed && view === this.#view) view.expand()
+        })
     }
     focusView() {
         this.#view.document.defaultView.focus()
     }
     destroy() {
-        this.#observer.unobserve(this)
-        this.#view.destroy()
+        if (this.#destroyed) return
+        this.#destroyed = true
+        this.#observer.disconnect()
+        this.#view?.destroy()
         this.#view = null
-        this.sections[this.#index]?.unload?.()
+        this.sections?.[this.#index]?.unload?.()
         this.#mediaQuery.removeEventListener('change', this.#mediaQueryListener)
     }
 }
