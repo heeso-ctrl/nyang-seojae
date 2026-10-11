@@ -119,6 +119,36 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
     handleTap((event.clientX - bounds.left) / Math.max(1, bounds.width));
   }, [handleTap]);
 
+  // 안드로이드 앱: BOOX 페이지 버튼(음량 키)을 앱이 'nyang-page' 이벤트로 넘겨준다. 화면 오류는 백지 대신 메시지로 보인다.
+  useEffect(() => {
+    const bridge = (window as unknown as { NyangAndroid?: { setReaderActive?: (active: boolean) => void } }).NyangAndroid;
+    bridge?.setReaderActive?.(true);
+    const onPage = (event: Event) => {
+      // DEVICE-CHECK: BOOX 옆면 버튼(위=이전, 아래=다음)으로 넘어가는지
+      turn((event as CustomEvent<string>).detail === 'previous' ? 'previous' : 'next');
+    };
+    const onError = (event: ErrorEvent) => {
+      // 브라우저가 흔히 내는 무해한 경고는 화면에 띄우지 않는다.
+      if (/ResizeObserver loop/i.test(event.message)) return;
+      console.error('[nyang-error]', event.message, event.filename, event.lineno);
+      setError(`화면 오류: ${event.message}`);
+    };
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const message = event.reason instanceof Error ? event.reason.message : String(event.reason);
+      console.error('[nyang-error]', message);
+      setError(`화면 오류: ${message}`);
+    };
+    window.addEventListener('nyang-page', onPage);
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => {
+      bridge?.setReaderActive?.(false);
+      window.removeEventListener('nyang-page', onPage);
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    };
+  }, [turn]);
+
   useEffect(() => {
     let live = true;
     let view: FoliateViewElement | undefined;
@@ -141,7 +171,9 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
           ...quotes.filter((item) => item.cfi).map((item) => ({ value: item.cfi!, kind: 'quote' as const })),
           ...editNotes.map((item) => ({ value: item.cfi, kind: 'edit' as const }))
         ];
+        console.info('[nyang-reader] start', epubFile.name, epubFile.blob.size, epubFile.blob.type, window.innerWidth, window.innerHeight);
         await ensureFoliate();
+        console.info('[nyang-reader] foliate ready');
         if (!live || !mountRef.current) return;
         view = document.createElement('foliate-view') as FoliateViewElement;
         viewRef.current = view;
@@ -235,14 +267,17 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
           window.removeEventListener('keydown', handleKey);
         });
         await view.open(new File([epubFile.blob], epubFile.name, { type: epubFile.blob.type || 'application/epub+zip' }));
+        console.info('[nyang-reader] opened', (view.book as unknown as { sections?: unknown[] })?.sections?.length, JSON.stringify(view.getBoundingClientRect()));
         if (!live) return;
         view.renderer.setAttribute('flow', 'paginated');
         view.renderer.setAttribute('margin', `${styleRef.current.margin}px`);
         view.renderer.removeAttribute('animated');
         setToc(view.book.toc ?? []);
         await view.init({ lastLocation: initialCfi ?? epubFile.lastCfi, showTextStart: true });
+        console.info('[nyang-reader] init done', JSON.stringify(view.getBoundingClientRect()), JSON.stringify(mountRef.current?.getBoundingClientRect()));
         if (live) scheduleIdle();
       } catch (reason) {
+        console.error('[nyang-reader] failed', reason instanceof Error ? `${reason.name}: ${reason.message}\n${reason.stack}` : String(reason));
         if (live) setError(reason instanceof Error ? reason.message : 'epub을 열지 못했습니다.');
       }
     })();
