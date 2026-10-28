@@ -1,3 +1,6 @@
+import { textStrokeFor } from './readerStyle';
+import type { DisplayMode, ReaderStyle } from './types';
+
 export interface FoliateBook {
   metadata?: { title?: unknown; author?: unknown };
   toc?: FoliateTocItem[];
@@ -75,13 +78,30 @@ export async function readEpubMetadata(file: File): Promise<{ title: string; aut
   }
 }
 
-export function readerCss(fontSize: number, lineHeight: number, fontFamily: 'book' | 'serif' | 'sans'): string {
-  const family = fontFamily === 'serif' ? 'Georgia, Batang, serif'
-    : fontFamily === 'sans' ? 'Arial, "Noto Sans CJK KR", sans-serif' : 'inherit';
+export function readerCss(style: ReaderStyle, mode: DisplayMode): string {
+  const family = style.fontFamily === 'serif' ? 'Georgia, Batang, serif'
+    : style.fontFamily === 'sans' ? 'Arial, "Noto Sans CJK KR", sans-serif' : 'inherit';
+  const foreground = mode === 'eink' ? '#000000' : '#221f1c';
+  const background = mode === 'eink' ? '#ffffff' : '#fffdf6';
+  const paragraphBlocks = ':where(p, li, blockquote, dd, div:not(:has(div, p))):not(h1 *, h2 *, h3 *, h4 *, h5 *, h6 *)';
+  const indentRule = style.indent === undefined ? '' : `\n    ${paragraphBlocks} { text-indent: ${style.indent}em !important; }`;
   return `
-    html { font-size: ${fontSize}%; color: #221f1c; background: #fffdf6; }
-    body { font-family: ${family}; }
-    p, li, blockquote, dd { line-height: ${lineHeight}; }
+    html, body { color: ${foreground} !important; background: ${background} !important; }
+    html { font-size: ${style.fontSize}px !important; }
+    body {
+      font-size: 1rem !important;
+      font-family: ${family} !important;
+      line-height: ${style.lineHeight} !important;
+      -webkit-text-stroke: ${textStrokeFor(style.fontWeight)}px !important;
+    }
+    body, p, div, li, blockquote, dd, span, h1, h2, h3, h4, h5, h6 {
+      color: ${foreground} !important;
+    }
+    ${paragraphBlocks} {
+      line-height: ${style.lineHeight} !important;
+      margin-top: 0 !important;
+      margin-bottom: ${style.paragraphSpacing}em !important;
+    }${indentRule}
     script { display: none !important; }
   `;
 }
