@@ -7,7 +7,8 @@ import { dentBox, dentMarkup, type CushionDent } from './dent';
 import { kakaoErrorMessage, searchKakaoBooks, type KakaoBookResult } from './kakao';
 import { readEpubMetadata } from './epub';
 import { ReaderView } from './ReaderView';
-import type { ActiveTimer, Book, BookSource, BookStatus, EditNote, EpubFile, Quote, ReaderKeys, Session } from './types';
+import { finishReaderClock, homeTimerPose, openPause, pauseReaderForBackground, resumeTimer, shouldAskAfterHidden } from './readerSession';
+import type { ActiveTimer, Book, BookSource, BookStatus, DisplayMode, EditNote, EpubFile, Quote, ReaderKeys, Session } from './types';
 import { sourceLabels, statusLabels } from './types';
 import alignData from '../public/art/cat/align.json';
 import themeData from '../public/art/themes.json';
@@ -53,15 +54,20 @@ function App() {
   const [libraryStatus, setLibraryStatus] = useState<BookStatus>('reading');
   const [modal, setModal] = useState<Modal>(null);
   const [themeId, setThemeId] = useState(themeData.default);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(() => (window as unknown as { NyangAndroid?: unknown }).NyangAndroid ? 'eink' : 'phone');
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState('');
   const [reader, setReader] = useState<ReaderTarget>();
   const [pendingReader, setPendingReader] = useState<{ book: Book; cfi?: string }>();
+  const [backgroundPromptDismissed, setBackgroundPromptDismissed] = useState(false);
+  const [manualAwayAt, setManualAwayAt] = useState<number>();
+  const [finishEndedAt, setFinishEndedAt] = useState<number>();
 
   const refresh = useCallback(async () => {
-    const [nextBooks, nextSessions, nextQuotes, nextEditNotes, nextTimer, themePref] = await Promise.all([
+    const [nextBooks, nextSessions, nextQuotes, nextEditNotes, nextTimer, themePref, displayPref, hiddenPref] = await Promise.all([
       db.books.toArray(), db.sessions.toArray(), db.quotes.toArray(),
-      db.editNotes.toArray(), db.activeTimers.get('current'), db.preferences.get('theme')
+      db.editNotes.toArray(), db.activeTimers.get('current'), db.preferences.get('theme'),
+      db.preferences.get('displayMode'), db.preferences.get('hiddenAt')
     ]);
     setBooks(nextBooks);
     setSessions(nextSessions);
@@ -69,9 +75,19 @@ function App() {
     setEditNotes(nextEditNotes);
     setTimer(nextTimer);
     if (typeof themePref?.value === 'string') setThemeId(themePref.value);
+    if (displayPref?.value === 'eink' || displayPref?.value === 'phone') setDisplayMode(displayPref.value);
+    if (!document.hidden && nextTimer && nextTimer.mode !== 'reader-auto' && typeof hiddenPref?.value === 'number') {
+      if (shouldAskAfterHidden(hiddenPref.value, Date.now())) setManualAwayAt(hiddenPref.value);
+      else void db.preferences.delete('hiddenAt');
+    }
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    // DEVICE-CHECK: 이북리더기 모드에서 앱 글자와 책 글자가 BOOX 기본 리더만큼 진한지
+    document.documentElement.classList.toggle('display-eink', displayMode === 'eink');
+    document.documentElement.classList.toggle('display-phone', displayMode === 'phone');
+  }, [displayMode]);
   useEffect(() => {
     const url = new URL(window.location.href);
     const action = url.searchParams.get('action');
@@ -90,7 +106,7 @@ function App() {
         const reading = (await db.books.where('status').equals('reading').toArray()).sort((a, b) => b.updatedAt - a.updatedAt);
         if (reading[0]) {
           const startedAt = Date.now();
-          await db.activeTimers.put({ id: 'current', bookId: reading[0].id, startedAt, pauses: [] });
+          await db.activeTimers.put({ id: 'current', bookId: reading[0].id, startedAt, pauses: [], mode: reading[0].source === 'own-epub' ? 'reader-auto' : 'timer' });
           await db.books.update(reading[0].id, { updatedAt: startedAt, startedAt: reading[0].startedAt ?? startedAt });
         } else {
           setLibraryStatus('reading');
@@ -109,6 +125,39 @@ function App() {
     const id = window.setTimeout(() => setNotice(''), 4_000);
     return () => window.clearTimeout(id);
   }, [notice]);
+  useEffect(() => {
+    const onHidden = async () => {
+      const active = await db.activeTimers.get('current');
+      if (!active) return;
+      if (active.mode === 'reader-auto') {
+        if (!reader) await db.activeTimers.put(pauseReaderForBackground(active, Date.now()));
+      } else {
+        const existing = await db.preferences.get('hiddenAt');
+        if (typeof existing?.value !== 'number') await db.preferences.put({ key: 'hiddenAt', value: Date.now() });
+      }
+    };
+    const onVisible = async () => {
+      if (reader) return;
+      const [active, hiddenPref] = await Promise.all([db.activeTimers.get('current'), db.preferences.get('hiddenAt')]);
+      if (!active) { await db.preferences.delete('hiddenAt'); return; }
+      if (active.mode === 'reader-auto') {
+        setBackgroundPromptDismissed(false);
+        setTab('home');
+        await refresh();
+        return;
+      }
+      if (typeof hiddenPref?.value === 'number' && shouldAskAfterHidden(hiddenPref.value, Date.now())) setManualAwayAt(hiddenPref.value);
+      else await db.preferences.delete('hiddenAt');
+    };
+    const onVisibility = () => { void (document.hidden ? onHidden() : onVisible()); };
+    const onPageHide = () => { void onHidden(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [reader, refresh]);
 
   const currentBook = books.find((book) => book.id === timer?.bookId);
   const selectedBook = books.find((book) => book.id === selectedBookId);
@@ -124,8 +173,9 @@ function App() {
     const startedAt = Date.now();
     await db.transaction('rw', db.books, db.activeTimers, async () => {
       await db.books.update(book.id, { status: 'reading', startedAt: book.startedAt ?? startedAt, updatedAt: startedAt });
-      await db.activeTimers.put({ id: 'current', bookId: book.id, startedAt, pauses: [] });
+      await db.activeTimers.put({ id: 'current', bookId: book.id, startedAt, pauses: [], mode: 'timer' });
     });
+    await db.preferences.delete('hiddenAt');
     await refresh();
     setTab('home');
     setSelectedBookId(undefined);
@@ -136,13 +186,14 @@ function App() {
     const pauses = [...timer.pauses];
     const last = pauses.at(-1);
     if (last && last.until === undefined) last.until = Date.now();
-    else pauses.push({ at: Date.now() });
+    else pauses.push({ at: Date.now(), reason: 'user' });
     await db.activeTimers.put({ ...timer, pauses });
     await refresh();
   }
 
   async function discardTimer() {
     await db.activeTimers.delete('current');
+    await db.preferences.delete('hiddenAt');
     setModal(null);
     await refresh();
   }
@@ -153,9 +204,12 @@ function App() {
     if (!epubFile) { setNotice('epub 파일 다시 넣기가 필요합니다.'); return; }
     let active = await db.activeTimers.get('current');
     if (!active) {
-      active = { id: 'current', bookId: book.id, startedAt: Date.now(), pauses: [] };
-      await db.activeTimers.put(active);
+      active = { id: 'current', bookId: book.id, startedAt: Date.now(), pauses: [], mode: 'reader-auto' };
+    } else {
+      active = { ...resumeTimer(active, Date.now()), mode: 'reader-auto' };
     }
+    await db.activeTimers.put(active);
+    setBackgroundPromptDismissed(false);
     setReader({ book, epubFile, timer: active, cfi });
     setPendingReader(undefined);
     await refresh();
@@ -176,7 +230,7 @@ function App() {
     if (active) {
       const endedAt = Date.now();
       await db.transaction('rw', db.sessions, db.activeTimers, async () => {
-        await db.sessions.put({ id: uid(), bookId: active.bookId, startedAt: active.startedAt, endedAt, activeSec: activeSeconds(active, endedAt), pauses: active.pauses.map((pause) => pause.until === undefined ? { ...pause, until: endedAt } : pause), mode: 'timer' });
+        await db.sessions.put({ id: uid(), bookId: active.bookId, startedAt: active.startedAt, endedAt, activeSec: activeSeconds(active, endedAt), pauses: active.pauses.map((pause) => pause.until === undefined ? { ...pause, until: endedAt } : pause), mode: active.mode === 'reader-auto' ? 'reader-auto' : 'timer' });
         await db.activeTimers.delete('current');
       });
     }
@@ -188,19 +242,26 @@ function App() {
     setTab('library');
   }
 
+  function openFinish(endedAt?: number) {
+    setFinishEndedAt(endedAt);
+    setModal('finish');
+  }
+
+  const readerRecovery = Boolean(timer?.mode === 'reader-auto' && openPause(timer)?.reason === 'background' && !backgroundPromptDismissed);
+
   const view = selectedBook && tab === 'library'
     ? <BookDetail book={selectedBook} sessions={sessions} quotes={quotes} editNotes={editNotes} onBack={() => setSelectedBookId(undefined)} onRefresh={refresh} onStart={() => void startReading(selectedBook)} onRead={(cfi) => void openReader(selectedBook, cfi)} onModal={setModal} setNotice={setNotice} />
     : tab === 'home'
-      ? <Home books={books} sessions={sessions} timer={timer} currentBook={currentBook} elapsedSec={elapsedSec} paused={timerPaused} themeId={themeId} onStart={startReading} onPause={togglePause} onFinish={() => setModal('finish')} onQuote={() => setModal('quote')} onAddBook={() => { setLibraryStatus('reading'); setTab('library'); setModal('add-book'); }} onShowDone={() => { setLibraryStatus('done'); setTab('library'); }} />
+      ? <Home books={books} sessions={sessions} timer={timer} currentBook={currentBook} elapsedSec={elapsedSec} paused={timerPaused} themeId={themeId} displayMode={displayMode} readerRecovery={readerRecovery} onStart={startReading} onRead={(book) => void openReader(book)} onPause={togglePause} onFinish={() => openFinish()} onQuote={() => setModal('quote')} onDismissRecovery={() => setBackgroundPromptDismissed(true)} onAddBook={() => { setLibraryStatus('reading'); setTab('library'); setModal('add-book'); }} onShowDone={() => { setLibraryStatus('done'); setTab('library'); }} />
       : tab === 'library'
         ? <Library books={books} status={libraryStatus} setStatus={setLibraryStatus} onOpenBook={openBook} onAdd={() => setModal('add-book')} />
         : tab === 'calendar'
           ? <Calendar books={books} sessions={sessions} onOpenBook={openBook} />
           : tab === 'quotes'
             ? <QuotesView books={books} quotes={quotes} onOpenBook={openBook} onOpenReader={(book, cfi) => void openReader(book, cfi)} />
-            : <Settings themeId={themeId} setThemeId={async (id) => { await db.preferences.put({ key: 'theme', value: id }); setThemeId(id); }} onImported={refresh} setNotice={setNotice} />;
+            : <Settings themeId={themeId} displayMode={displayMode} setDisplayMode={async (mode) => { await db.preferences.put({ key: 'displayMode', value: mode }); setDisplayMode(mode); }} setThemeId={async (id) => { await db.preferences.put({ key: 'theme', value: id }); setThemeId(id); }} onImported={refresh} setNotice={setNotice} />;
 
-  if (reader) return <ReaderView book={reader.book} epubFile={reader.epubFile} timer={reader.timer} initialCfi={reader.cfi} onChanged={refresh} onExit={() => setReader(undefined)} />;
+  if (reader) return <ReaderView book={reader.book} epubFile={reader.epubFile} timer={reader.timer} displayMode={displayMode} initialCfi={reader.cfi} onChanged={refresh} onBackground={() => { setReader(undefined); setTab('home'); setBackgroundPromptDismissed(false); }} onExit={() => { setReader(undefined); setTab('home'); }} />;
 
   return (
     <div className={`app-shell ${tab === 'home' ? 'home-active' : ''}`}>
@@ -218,23 +279,24 @@ function App() {
       </nav>
       {notice && <div className="toast" role="status">{notice}</div>}
       {modal === 'add-book' && <BookForm onClose={() => setModal(null)} onSaved={refresh} onOpenSettings={() => { setModal(null); setTab('settings'); }} onOpenBook={(book) => { setSelectedBookId(book.id); setTab('library'); }} setNotice={setNotice} />}
-      {modal === 'finish' && timer && currentBook && <FinishForm timer={timer} book={currentBook} onClose={() => setModal(null)} onSaved={refresh} onDiscard={discardTimer} />}
+      {modal === 'finish' && timer && currentBook && <FinishForm timer={timer} book={currentBook} endedAt={finishEndedAt} onClose={() => { setModal(null); setFinishEndedAt(undefined); }} onSaved={async () => { setFinishEndedAt(undefined); await refresh(); }} onDiscard={discardTimer} />}
       {modal === 'quote' && currentBook && <QuoteForm book={currentBook} onClose={() => setModal(null)} onSaved={refresh} />}
       {modal === 'manual-session' && selectedBook && <ManualSessionForm book={selectedBook} onClose={() => setModal(null)} onSaved={refresh} />}
       {modal === 'edit-book' && selectedBook && <BookForm book={selectedBook} onClose={() => setModal(null)} onSaved={refresh} onOpenSettings={() => { setModal(null); setTab('settings'); }} onOpenBook={(next) => { setSelectedBookId(next.id); setTab('library'); }} setNotice={setNotice} />}
       {pendingReader && <Dialog title="다른 책을 읽는 중이에요" onClose={() => setPendingReader(undefined)}><p><strong>{books.find((item) => item.id === timer?.bookId)?.title ?? '다른 책'}</strong>의 기록을 저장하고 이 책을 열까요?</p><div className="form-actions"><button onClick={() => setPendingReader(undefined)}>취소</button><button className="primary" onClick={() => void saveOtherTimerAndOpen()}>그 책 기록 저장하고 이 책 읽기</button></div></Dialog>}
+      {manualAwayAt && timer && timer.mode !== 'reader-auto' && <Dialog title="아직 읽는 중이에요?" onClose={() => setManualAwayAt(undefined)}><p>앱을 떠난 뒤 2시간이 넘었어요. 독서를 계속하고 있나요?</p><div className="form-actions"><button onClick={() => { void db.preferences.delete('hiddenAt'); setManualAwayAt(undefined); }}>계속 읽기</button><button className="primary" onClick={() => { void db.preferences.delete('hiddenAt'); const endedAt = manualAwayAt; setManualAwayAt(undefined); openFinish(endedAt); }}>앱을 떠난 시각에 종료</button></div></Dialog>}
     </div>
   );
 }
 
 function Home(props: {
-  books: Book[]; sessions: Session[]; timer?: ActiveTimer; currentBook?: Book; elapsedSec: number; paused: boolean; themeId: string;
-  onStart: (book: Book) => Promise<void>; onPause: () => Promise<void>; onFinish: () => void; onQuote: () => void; onAddBook: () => void; onShowDone: () => void;
+  books: Book[]; sessions: Session[]; timer?: ActiveTimer; currentBook?: Book; elapsedSec: number; paused: boolean; themeId: string; displayMode: DisplayMode; readerRecovery: boolean;
+  onStart: (book: Book) => Promise<void>; onRead: (book: Book) => void; onPause: () => Promise<void>; onFinish: () => void; onQuote: () => void; onDismissRecovery: () => void; onAddBook: () => void; onShowDone: () => void;
 }) {
   const readingBooks = props.books.filter((book) => book.status === 'reading').sort((a, b) => b.updatedAt - a.updatedAt);
   const doneCount = props.books.filter((book) => book.status === 'done').length;
   const theme = themeData.themes.find((item) => item.id === props.themeId) ?? themeData.themes[0];
-  const actualPose: Pose = props.timer ? (props.paused ? 'resting' : 'reading') : (new Date().getHours() >= 23 ? 'sleeping' : 'idle');
+  const actualPose: Pose = props.timer ? homeTimerPose(props.timer) : (new Date().getHours() >= 23 ? 'sleeping' : 'idle');
   const [previewPose, setPreviewPose] = useState<Pose>();
   const pose = previewPose ?? actualPose;
   const sprite = alignData.sprites[pose];
@@ -245,6 +307,8 @@ function Home(props: {
   const [dayStart, dayEnd] = localDayBounds();
   const todaySec = props.sessions.filter((s) => s.startedAt >= dayStart && s.startedAt < dayEnd).reduce((sum, s) => sum + s.activeSec, 0) + props.elapsedSec;
   const note = homeNotes[new Date().getDate() % homeNotes.length];
+  const einkFile = (theme as typeof theme & { einkFile?: string }).einkFile;
+  const backgroundFile = props.displayMode === 'eink' && einkFile ? einkFile : theme.file;
 
   useEffect(() => {
     const element = viewportRef.current;
@@ -271,7 +335,7 @@ function Home(props: {
     <section className="scene-card" aria-label={`${theme.name}에서 쉬는 고양이`}>
       <div className="scene-viewport" ref={viewportRef}>
         <div className="art-box" style={{ width: layout.width, height: layout.height, left: layout.left, top: layout.top }}>
-          <img className="scene-bg" src={`${import.meta.env.BASE_URL}art/${theme.file}`} alt="" />
+          <img className="scene-bg" src={`${import.meta.env.BASE_URL}art/${backgroundFile}`} alt="" />
           {/* DEVICE-CHECK: BOOX 컬러 e잉크에서 눌림 자국이 너무 진하거나 얼룩처럼 보이지 않는지 */}
           {/* DEVICE-CHECK: mix-blend-mode: multiply가 BOOX Chrome에서 적용되는지(안 되면 연한 회색 면으로 보임) */}
           {dent && dentPosition && <svg
@@ -289,21 +353,21 @@ function Home(props: {
         <p className="paper-note">{note}</p>
         <button className="shelf-count" onClick={props.onShowDone}>책장 {doneCount}권</button>
         <div className={`timer-overlap ${props.timer ? 'running' : 'waiting'}`}>
-          {props.timer && props.currentBook ? <>
+          {props.timer && props.currentBook && props.readerRecovery ? <div className="reader-recovery" role="status">
+            <strong>‘{props.currentBook.title}’ {Math.round(progressOf(props.currentBook) * 100)}%까지 읽다 멈췄어요 (이번에 {Math.floor(props.elapsedSec / 60)}분). 이어서 읽을까요?</strong>
+            <div className="button-row three"><button onClick={() => props.onRead(props.currentBook!)}>이어 읽기</button><button onClick={props.onFinish}>여기서 종료</button><button onClick={props.onDismissRecovery}>나중에</button></div>
+          </div> : props.timer && props.currentBook ? <>
             <div className="timer-line">
               <Cover book={props.currentBook} small />
               <div className="timer-title"><strong>{props.currentBook.title}</strong><span>오늘 {Math.floor(todaySec / 60)}분 · 진행 {Math.round(progressOf(props.currentBook) * 100)}%</span></div>
               <div className="timer-minutes"><strong>{Math.floor(props.elapsedSec / 60)}</strong><small>분</small></div>
             </div>
-            <div className="button-row three">
-              <button onClick={() => void props.onPause()}>{props.paused ? '다시 읽기' : '일시 정지'}</button>
-              <button onClick={props.onFinish}>독서 종료</button>
-              <button onClick={props.onQuote}>문장 담기</button>
-            </div>
+            {props.timer.mode === 'reader-auto' ? <div className="button-row three"><button onClick={() => props.onRead(props.currentBook!)}>이어 읽기</button><button onClick={props.onFinish}>독서 종료</button><button onClick={props.onQuote}>문장 담기</button></div>
+              : <div className="button-row three"><button onClick={() => void props.onPause()}>{props.paused ? '다시 읽기' : '일시 정지'}</button><button onClick={props.onFinish}>독서 종료</button><button onClick={props.onQuote}>문장 담기</button></div>}
           </> : <>
             <div className="empty-timer"><strong>무슨 책을 펼쳐 볼까요?</strong><span>읽고 있는 책에서 바로 시작할 수 있어요.</span></div>
             <div className="reading-shortlist">
-              {readingBooks.length ? readingBooks.slice(0, 2).map((book) => <button key={book.id} onClick={() => void props.onStart(book)}><Cover book={book} small /><span>{book.title}</span><b>시작</b></button>) : <button onClick={props.onAddBook}>서재에서 책을 추가해 주세요</button>}
+              {readingBooks.length ? readingBooks.slice(0, 2).map((book) => <button key={book.id} onClick={() => book.source === 'own-epub' ? props.onRead(book) : void props.onStart(book)}><Cover book={book} small /><span>{book.title}</span><b>{book.source === 'own-epub' ? '읽기' : '읽기 시작'}</b></button>) : <button onClick={props.onAddBook}>서재에서 책을 추가해 주세요</button>}
             </div>
           </>}
         </div>
@@ -486,7 +550,7 @@ function QuotesView({ books, quotes, onOpenBook, onOpenReader }: { books: Book[]
   </div>;
 }
 
-function Settings({ themeId, setThemeId, onImported, setNotice }: { themeId: string; setThemeId: (id: string) => Promise<void>; onImported: () => Promise<void>; setNotice: (message: string) => void }) {
+function Settings({ themeId, displayMode, setDisplayMode, setThemeId, onImported, setNotice }: { themeId: string; displayMode: DisplayMode; setDisplayMode: (mode: DisplayMode) => Promise<void>; setThemeId: (id: string) => Promise<void>; onImported: () => Promise<void>; setNotice: (message: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [persistResult, setPersistResult] = useState<string>();
   const [kakaoKey, setKakaoKey] = useState('');
@@ -548,7 +612,8 @@ function Settings({ themeId, setThemeId, onImported, setNotice }: { themeId: str
   }
   const poses: Pose[] = ['reading', 'resting', 'idle', 'sleeping'];
   return <div className="page settings-page"><div className="page-heading"><div><small>기기와 서재 관리</small><h1>설정</h1></div></div>
-    <section className="settings-card"><h2>방 테마</h2><div className="theme-list">{themeData.themes.map((theme) => <button key={theme.id} className={theme.id === themeId ? 'active' : ''} onClick={() => void setThemeId(theme.id)}><img src={`${import.meta.env.BASE_URL}art/${theme.file}`} alt="" /><span>{theme.name}</span></button>)}</div><h3>고양이 자세 미리보기</h3><div className="pose-list">{poses.map((pose) => <figure key={pose}><img src={`${import.meta.env.BASE_URL}art/cat/${alignData.sprites[pose].file}`} alt="" /><figcaption>{{ reading: '읽는 중', resting: '쉬는 중', idle: '대기', sleeping: '자는 중' }[pose]}</figcaption></figure>)}</div></section>
+    <section className="settings-card"><h2>화면 모드</h2><div className="display-mode" role="group" aria-label="화면 모드"><button className={displayMode === 'eink' ? 'active' : ''} onClick={() => void setDisplayMode('eink')}>이북리더기</button><button className={displayMode === 'phone' ? 'active' : ''} onClick={() => void setDisplayMode('phone')}>휴대폰</button></div><p>이북리더기 모드는 흰 바탕과 진한 검정 글자로 표시합니다.</p></section>
+    <section className="settings-card"><h2>방 테마</h2><div className="theme-list">{themeData.themes.map((theme) => { const einkFile = (theme as typeof theme & { einkFile?: string }).einkFile; const file = displayMode === 'eink' && einkFile ? einkFile : theme.file; return <button key={theme.id} className={theme.id === themeId ? 'active' : ''} onClick={() => void setThemeId(theme.id)}><img src={`${import.meta.env.BASE_URL}art/${file}`} alt="" /><span>{theme.name}</span></button>; })}</div><h3>고양이 자세 미리보기</h3><div className="pose-list">{poses.map((pose) => <figure key={pose}><img src={`${import.meta.env.BASE_URL}art/cat/${alignData.sprites[pose].file}`} alt="" /><figcaption>{{ reading: '읽는 중', resting: '쉬는 중', idle: '대기', sleeping: '자는 중' }[pose]}</figcaption></figure>)}</div></section>
     <section className="settings-card"><h2>책 검색(카카오)</h2><p>키는 이 기기에만 저장되고 백업 파일에도 들어가지 않습니다.</p><div className="secret-row"><label>REST API 키<input type={showKakaoKey ? 'text' : 'password'} value={kakaoKey} onChange={(event) => setKakaoKey(event.target.value)} autoComplete="off" /></label><button onClick={() => setShowKakaoKey((value) => !value)}>{showKakaoKey ? '숨기기' : '보기'}</button></div><div className="button-row"><button onClick={() => void saveKakaoKey()}>저장</button><button onClick={() => void clearKakaoKey()}>지우기</button><button onClick={() => void testKakaoConnection()}>연결 시험</button></div>{kakaoResult && <p className="result-text" role="status">{kakaoResult}</p>}</section>
     <ReaderKeySettings setNotice={setNotice} />
     <section className="settings-card"><h2>내 데이터</h2><p>책, 기록, 문장과 표지를 JSON 파일 하나로 보관합니다.</p><label className="check"><input type="checkbox" checked={includeEpubFiles} onChange={(event) => setIncludeEpubFiles(event.target.checked)} /> epub 파일 포함(백업 파일이 커질 수 있어요)</label><div className="button-row"><button onClick={() => void downloadBackup()}>백업 내보내기</button><button onClick={() => fileRef.current?.click()}>백업 가져오기</button></div><input className="visually-hidden" ref={fileRef} type="file" accept="application/json,.json" onChange={(e) => void restore(e.target.files?.[0])} /></section>
@@ -712,20 +777,24 @@ function KakaoBookSearch({ onSelect, onOpenSettings }: { onSelect: (book: KakaoB
   return <section className="book-search wide"><strong>책 검색</strong>{online ? <div className="book-search-row"><input aria-label="카카오 책 검색어" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={handleSearchKeyDown} /><button type="button" onClick={() => void search()}>찾기</button></div> : <p>인터넷 연결 시 사용 가능</p>}{loading && <p role="status">찾는 중…</p>}{message && <p role="status">{message}</p>}{results.length > 0 && <div className="search-results">{results.map((result, index) => <button type="button" key={`${result.isbn ?? result.title}-${index}`} onClick={() => { onSelect(result); setResults([]); setMessage('책 정보를 채웠습니다.'); }}>{result.coverUrl ? <img src={result.coverUrl} alt="" /> : <span className="search-cover-empty" aria-hidden="true" />}<span><b>{result.title}</b><small>{[result.author, result.publisher, result.publishedYear].filter(Boolean).join(' · ')}</small></span></button>)}</div>}<small className="search-credit">검색: 카카오</small></section>;
 }
 
-function FinishForm({ timer, book, onClose, onSaved, onDiscard }: { timer: ActiveTimer; book: Book; onClose: () => void; onSaved: () => Promise<void>; onDiscard: () => Promise<void> }) {
+function FinishForm({ timer, book, endedAt: endedAtProp, onClose, onSaved, onDiscard }: { timer: ActiveTimer; book: Book; endedAt?: number; onClose: () => void; onSaved: () => Promise<void>; onDiscard: () => Promise<void> }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const data = new FormData(event.currentTarget); const endedAt = Date.now();
+    event.preventDefault(); const data = new FormData(event.currentTarget); const endedAt = endedAtProp ?? Date.now();
     const pageTo = parseOptionalNumber(data.get('pageTo')); const totalPages = book.totalPages;
-    const done = data.get('done') === 'on';
+    let done = data.get('done') === 'on';
     const progress = resolveProgress({ progressInput: String(data.get('progress') ?? ''), pageTo, totalPages, previousProgress: book.progress, done });
-    await db.transaction('rw', db.sessions, db.books, db.activeTimers, async () => {
-      await db.sessions.put({ id: uid(), bookId: book.id, startedAt: timer.startedAt, endedAt, activeSec: activeSeconds(timer, endedAt), pauses: timer.pauses.map((p) => p.until ? p : { ...p, until: endedAt }), mode: 'timer', pageFrom: book.currentPage, pageTo, progressFrom: book.progress, progressTo: progress, note: String(data.get('note')).trim() || undefined });
+    if (!done && (progress ?? progressOf(book)) >= 1 && book.status !== 'done') done = window.confirm('다 읽었어요로 표시할까요?');
+    const result = finishReaderClock({ timer, lastInputAt: endedAt }, endedAt);
+    await db.transaction('rw', db.sessions, db.books, db.activeTimers, db.preferences, async () => {
+      if (result.keep) await db.sessions.put({ id: uid(), bookId: book.id, startedAt: timer.startedAt, endedAt, activeSec: result.activeSec, pauses: result.pauses, mode: timer.mode === 'reader-auto' ? 'reader-auto' : 'timer', pageFrom: timer.mode === 'reader-auto' ? undefined : book.currentPage, pageTo: timer.mode === 'reader-auto' ? undefined : pageTo, progressFrom: book.progress, progressTo: progress, note: String(data.get('note')).trim() || undefined });
       await db.books.update(book.id, { currentPage: pageTo ?? book.currentPage, progress, status: done ? 'done' : 'reading', finishedAt: done ? endedAt : book.finishedAt, updatedAt: endedAt });
       await db.activeTimers.delete('current');
+      await db.preferences.delete('hiddenAt');
     });
     await onSaved(); onClose();
   }
-  return <Dialog title="독서 종료" onClose={onClose}><form onSubmit={submit} className="form-grid"><p className="wide form-intro"><strong>{book.title}</strong><br />이번 독서 {Math.max(1, Math.round(activeSeconds(timer) / 60))}분을 기록할까요?</p><label>읽은 쪽<input name="pageTo" type="number" min="0" defaultValue={book.currentPage} /></label><label>진행률 %<input name="progress" type="number" min="0" max="100" placeholder={`현재 ${Math.round(progressOf(book) * 100)}%`} /></label><label className="wide">메모<textarea name="note" rows={3} /></label><label className="check wide"><input name="done" type="checkbox" /> 이 책을 다 읽었어요</label><div className="form-actions wide spread"><button className="danger" type="button" onClick={() => void onDiscard()}>기록 없이 버리기</button><span><button type="button" onClick={onClose}>계속 읽기</button><button className="primary" type="submit">기록 저장</button></span></div></form></Dialog>;
+  const previewEndedAt = endedAtProp ?? Date.now();
+  return <Dialog title="독서 종료" onClose={onClose}><form onSubmit={submit} className="form-grid"><p className="wide form-intro"><strong>{book.title}</strong><br />이번 독서 {Math.max(1, Math.round(activeSeconds(timer, previewEndedAt) / 60))}분을 기록할까요?</p>{timer.mode !== 'reader-auto' && <label>읽은 쪽<input name="pageTo" type="number" min="0" defaultValue={book.currentPage} /></label>}<label className={timer.mode === 'reader-auto' ? 'wide' : ''}>진행률 %<input name="progress" type="number" min="0" max="100" defaultValue={timer.mode === 'reader-auto' ? Math.round(progressOf(book) * 100) : undefined} placeholder={`현재 ${Math.round(progressOf(book) * 100)}%`} /></label><label className="wide">메모<textarea name="note" rows={3} /></label><label className="check wide"><input name="done" type="checkbox" /> 이 책을 다 읽었어요</label><div className="form-actions wide spread"><button className="danger" type="button" onClick={() => void onDiscard()}>기록 없이 버리기</button><span><button type="button" onClick={onClose}>계속 읽기</button><button className="primary" type="submit">기록 저장</button></span></div></form></Dialog>;
 }
 
 function ManualSessionForm({ book, onClose, onSaved }: { book: Book; onClose: () => void; onSaved: () => Promise<void> }) {

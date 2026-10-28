@@ -44,6 +44,7 @@ export interface StoredBlob {
 export interface Pause {
   at: number;
   until?: number;
+  reason?: 'user' | 'idle' | 'outside-reader' | 'background';
 }
 
 export interface Session {
@@ -87,7 +88,7 @@ export interface Wallet { id: 'me'; coins: number }
 export interface OwnedItem { itemId: string; acquiredAt: number }
 export interface Equipped { id: 'me'; theme: string; set: string; fur?: string; hat?: string; outfit?: string }
 export interface CoinLog { id: string; amount: number; reason: string; at: number }
-export interface ActiveTimer { id: 'current'; bookId: string; startedAt: number; pauses: Pause[] }
+export interface ActiveTimer { id: 'current'; bookId: string; startedAt: number; pauses: Pause[]; mode?: 'timer' | 'reader-auto' }
 export interface Preference { key: string; value: unknown }
 
 export interface ReaderKeys {
@@ -99,9 +100,14 @@ export interface ReaderKeys {
 export interface ReaderStyle {
   fontSize: number;
   lineHeight: number;
+  paragraphSpacing: number;
+  indent?: number;
   margin: number;
+  fontWeight: 400 | 500 | 600 | 700;
   fontFamily: 'book' | 'serif' | 'sans';
 }
+
+export type DisplayMode = 'eink' | 'phone';
 
 export const sourceLabels: Record<BookSource, string> = {
   'own-epub': '내 글',

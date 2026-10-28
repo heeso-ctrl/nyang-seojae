@@ -1,3 +1,6 @@
+import { textStrokeFor } from './readerStyle';
+import type { DisplayMode, ReaderStyle } from './types';
+
 export interface FoliateBook {
   metadata?: { title?: unknown; author?: unknown };
   toc?: FoliateTocItem[];
@@ -75,13 +78,24 @@ export async function readEpubMetadata(file: File): Promise<{ title: string; aut
   }
 }
 
-export function readerCss(fontSize: number, lineHeight: number, fontFamily: 'book' | 'serif' | 'sans'): string {
-  const family = fontFamily === 'serif' ? 'Georgia, Batang, serif'
-    : fontFamily === 'sans' ? 'Arial, "Noto Sans CJK KR", sans-serif' : 'inherit';
+export function readerCss(style: ReaderStyle, mode: DisplayMode): string {
+  const family = style.fontFamily === 'serif' ? 'Georgia, Batang, serif'
+    : style.fontFamily === 'sans' ? 'Arial, "Noto Sans CJK KR", sans-serif' : 'inherit';
+  const foreground = mode === 'eink' ? '#000000' : '#221f1c';
+  const background = mode === 'eink' ? '#ffffff' : '#fffdf6';
+  const paragraphBlocks = 'p, li, blockquote, div:not(:has(div, p))';
+  const indentRule = style.indent === undefined ? '' : `\n    ${paragraphBlocks} { text-indent: ${style.indent}em !important; }`;
   return `
-    html { font-size: ${fontSize}%; color: #221f1c; background: #fffdf6; }
-    body { font-family: ${family}; }
-    p, li, blockquote, dd { line-height: ${lineHeight}; }
+    html, body { color: ${foreground} !important; background: ${background} !important; }
+    body { font-family: ${family} !important; }
+    body, p, div, li, blockquote, dd, span {
+      color: ${foreground} !important;
+      font-size: ${style.fontSize}px !important;
+      line-height: ${style.lineHeight} !important;
+      font-weight: ${style.fontWeight} !important;
+      -webkit-text-stroke: ${textStrokeFor(style.fontWeight)}px !important;
+    }
+    ${paragraphBlocks} { margin-bottom: ${style.paragraphSpacing}em !important; }${indentRule}
     script { display: none !important; }
   `;
 }

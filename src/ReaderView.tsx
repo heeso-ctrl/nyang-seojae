@@ -1,19 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { db } from './db';
 import { ensureFoliate, readerCss, type FoliateRelocate, type FoliateTocItem, type FoliateViewElement } from './epub';
-import { finishReaderClock, readerAutoPause, readerInput, readerVisibility, READER_IDLE_MS, type ReaderClock } from './readerSession';
+import { leaveReader, openPause, readerAutoPause, readerInput, readerVisibility, READER_IDLE_MS, type ReaderClock } from './readerSession';
 import { readerTapRatio } from './readerTap';
-import type { ActiveTimer, Book, EditNote, EpubFile, Quote, ReaderKeys, ReaderStyle } from './types';
+import { defaultReaderStyle, migrateReaderStyle } from './readerStyle';
+import type { ActiveTimer, Book, DisplayMode, EditNote, EpubFile, Quote, ReaderKeys, ReaderStyle } from './types';
 
 const DEFAULT_KEYS: ReaderKeys = {
   next: ['PageDown', 'ArrowRight', 'ArrowDown', ' ', 'Space'],
   previous: ['PageUp', 'ArrowLeft', 'ArrowUp'],
   swapped: false
 };
-const DEFAULT_STYLE: ReaderStyle = { fontSize: 100, lineHeight: 1.7, margin: 48, fontFamily: 'book' };
-const FONT_SIZES = [85, 100, 115, 130, 145];
-const LINE_HEIGHTS = [1.4, 1.7, 2];
-const MARGINS = [24, 48, 72];
 
 interface SelectionInfo {
   text: string;
@@ -21,12 +18,14 @@ interface SelectionInfo {
   top: number;
 }
 
-export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChanged }: {
+export function ReaderView({ book, epubFile, timer, displayMode, initialCfi, onExit, onBackground, onChanged }: {
   book: Book;
   epubFile: EpubFile;
   timer: ActiveTimer;
+  displayMode: DisplayMode;
   initialCfi?: string;
   onExit: () => void;
+  onBackground: () => void;
   onChanged: () => Promise<void>;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -35,15 +34,16 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
   const idleRef = useRef<number | undefined>(undefined);
   const pendingLocationRef = useRef<FoliateRelocate | undefined>(undefined);
   const persistTimerRef = useRef<number | undefined>(undefined);
+  const styleTimerRef = useRef<number | undefined>(undefined);
   const lastPersistRef = useRef(0);
   const keysRef = useRef(DEFAULT_KEYS);
-  const styleRef = useRef(DEFAULT_STYLE);
+  const styleRef = useRef(defaultReaderStyle(displayMode));
   const annotationsRef = useRef<Array<{ value: string; kind: 'quote' | 'edit' }>>([]);
   const progressRef = useRef(epubFile.progress ?? book.progress ?? 0);
   const [toolsVisible, setToolsVisible] = useState(true);
   const [tocOpen, setTocOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
-  const [style, setStyle] = useState(DEFAULT_STYLE);
+  const [style, setStyle] = useState(() => defaultReaderStyle(displayMode));
   const [toc, setToc] = useState<FoliateTocItem[]>([]);
   const [progress, setProgress] = useState(epubFile.progress ?? book.progress ?? 0);
   const [chapter, setChapter] = useState('');
@@ -163,10 +163,10 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
         ]);
         if (!live) return;
         if (keysPref?.value) keysRef.current = { ...DEFAULT_KEYS, ...(keysPref.value as Partial<ReaderKeys>) };
-        if (stylePref?.value) {
-          styleRef.current = { ...DEFAULT_STYLE, ...(stylePref.value as Partial<ReaderStyle>) };
-          setStyle(styleRef.current);
-        }
+        const migratedStyle = migrateReaderStyle(stylePref?.value, displayMode);
+        styleRef.current = migratedStyle;
+        setStyle(migratedStyle);
+        if (stylePref?.value) void db.preferences.put({ key: 'readerStyle', value: migratedStyle });
         annotationsRef.current = [
           ...quotes.filter((item) => item.cfi).map((item) => ({ value: item.cfi!, kind: 'quote' as const })),
           ...editNotes.map((item) => ({ value: item.cfi, kind: 'edit' as const }))
@@ -234,7 +234,7 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
             doc.removeEventListener('pointerup', pointerListener);
             doc.removeEventListener('click', clickListener);
           });
-          view!.renderer.setStyles?.(readerCss(styleRef.current.fontSize, styleRef.current.lineHeight, styleRef.current.fontFamily));
+          view!.renderer.setStyles?.(readerCss(styleRef.current, displayMode));
         };
         const onRelocate = (event: Event) => {
           const detail = (event as CustomEvent<FoliateRelocate>).detail;
@@ -291,27 +291,47 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
       idleRef.current = undefined;
       if (persistTimerRef.current) window.clearTimeout(persistTimerRef.current);
       persistTimerRef.current = undefined;
+      if (styleTimerRef.current) window.clearTimeout(styleTimerRef.current);
+      styleTimerRef.current = undefined;
       view?.close();
       view?.remove();
     };
-  }, [book.id, epubFile.blob, epubFile.lastCfi, epubFile.name, handleTap, initialCfi, markInput, persistLocation, scheduleIdle, turn]);
+  }, [book.id, displayMode, epubFile.blob, epubFile.lastCfi, epubFile.name, handleTap, initialCfi, markInput, persistLocation, scheduleIdle, turn]);
 
   useEffect(() => {
-    const onVisibility = () => {
-      clockRef.current = readerVisibility(clockRef.current, document.hidden, Date.now());
-      void saveClock();
-      if (!document.hidden) scheduleIdle();
+    const pauseForBackground = async () => {
+      clockRef.current = readerVisibility(clockRef.current, true);
+      await saveClock();
     };
+    const onVisibility = () => {
+      if (document.hidden) { void pauseForBackground(); return; }
+      if (openPause(clockRef.current.timer)?.reason === 'background') {
+        void (async () => { await onChanged(); onBackground(); })();
+      }
+    };
+    const onPageHide = () => { void pauseForBackground(); };
     document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [saveClock, scheduleIdle]);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [onBackground, onChanged, saveClock]);
 
-  async function changeStyle(next: ReaderStyle) {
+  function applyStyle(next: ReaderStyle) {
     styleRef.current = next;
-    setStyle(next);
     viewRef.current?.renderer.setAttribute('margin', `${next.margin}px`);
-    viewRef.current?.renderer.setStyles?.(readerCss(next.fontSize, next.lineHeight, next.fontFamily));
-    await db.preferences.put({ key: 'readerStyle', value: next });
+    viewRef.current?.renderer.setStyles?.(readerCss(next, displayMode));
+  }
+
+  function changeStyle(next: ReaderStyle) {
+    setStyle(next);
+    void db.preferences.put({ key: 'readerStyle', value: next });
+    if (styleTimerRef.current) window.clearTimeout(styleTimerRef.current);
+    styleTimerRef.current = window.setTimeout(() => {
+      styleTimerRef.current = undefined;
+      applyStyle(next);
+    }, 400);
   }
 
   async function saveSelection() {
@@ -335,28 +355,10 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
     await onChanged();
   }
 
-  async function finish() {
+  async function leave() {
     await persistLocation(true);
-    const endedAt = Date.now();
-    const result = finishReaderClock(clockRef.current, endedAt);
-    const finalProgress = pendingLocationRef.current?.fraction ?? progressRef.current;
-    await db.transaction('rw', db.sessions, db.books, db.activeTimers, async () => {
-      if (result.keep) {
-        await db.sessions.put({
-          id: crypto.randomUUID(), bookId: book.id, startedAt: timer.startedAt, endedAt,
-          activeSec: result.activeSec, pauses: result.pauses, mode: 'reader-auto',
-          progressFrom: epubFile.progress ?? book.progress, progressTo: finalProgress
-        });
-      }
-      const done = finalProgress >= 1 && book.status !== 'done'
-        ? window.confirm('다 읽었어요로 표시할까요?') : false;
-      await db.books.update(book.id, {
-        progress: finalProgress, updatedAt: endedAt,
-        status: done ? 'done' : book.status,
-        finishedAt: done ? endedAt : book.finishedAt
-      });
-      await db.activeTimers.delete('current');
-    });
+    clockRef.current = leaveReader(clockRef.current);
+    await saveClock();
     await onChanged();
     onExit();
   }
@@ -369,24 +371,27 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
 
   return <div className="reader-screen">
     {toolsVisible && <header className="reader-toolbar reader-topbar">
-      <button onClick={() => void finish()} aria-label="뷰어 나가기">← 나가기</button>
+      <button onClick={() => void leave()} aria-label="뷰어 나가기">← 나가기</button>
       <strong>{book.title}</strong>
       <button onClick={() => { setTocOpen((value) => !value); setStyleOpen(false); }}>목차</button>
       <button onClick={() => { setStyleOpen((value) => !value); setTocOpen(false); }}>글자 설정</button>
     </header>}
     <div ref={mountRef} className="reader-mount" aria-label={`${book.title} epub 본문`} onClick={handleViewerClick} />
-    {error && <div className="reader-error" role="alert">{error}<button onClick={() => void finish()}>나가기</button></div>}
+    {error && <div className="reader-error" role="alert">{error}<button onClick={() => void leave()}>나가기</button></div>}
     {toolsVisible && <footer className="reader-toolbar reader-bottombar">
       <label><span>{Math.round(progress * 100)}%</span><input aria-label="읽기 진행률" type="range" min="0" max="1" step="0.001" value={progress} onChange={(event) => { const value = Number(event.target.value); progressRef.current = value; setProgress(value); markInput(); void viewRef.current?.goToFraction(value); }} /></label>
       <span>{chapter || '현재 장'}</span>
     </footer>}
     {tocOpen && <aside className="reader-panel reader-toc" aria-label="목차"><h2>목차</h2><TocList items={toc} onMove={moveTo} /><button onClick={() => setTocOpen(false)}>닫기</button></aside>}
-    {styleOpen && <aside className="reader-panel reader-style" aria-label="글자 설정"><h2>글자 설정</h2>
-      <label>글자 크기<select value={style.fontSize} onChange={(event) => void changeStyle({ ...style, fontSize: Number(event.target.value) })}>{FONT_SIZES.map((value, index) => <option key={value} value={value}>{index + 1}단계</option>)}</select></label>
-      <label>줄간격<select value={style.lineHeight} onChange={(event) => void changeStyle({ ...style, lineHeight: Number(event.target.value) })}>{LINE_HEIGHTS.map((value, index) => <option key={value} value={value}>{index + 1}단계</option>)}</select></label>
-      <label>여백<select value={style.margin} onChange={(event) => void changeStyle({ ...style, margin: Number(event.target.value) })}>{MARGINS.map((value, index) => <option key={value} value={value}>{index + 1}단계</option>)}</select></label>
-      <label>글꼴<select value={style.fontFamily} onChange={(event) => void changeStyle({ ...style, fontFamily: event.target.value as ReaderStyle['fontFamily'] })}><option value="book">책 기본</option><option value="serif">명조 계열</option><option value="sans">고딕 계열</option></select></label>
-      <button onClick={() => setStyleOpen(false)}>닫기</button>
+    {styleOpen && <aside className="reader-panel reader-style" aria-label="글자 설정"><div className="reader-style-head"><h2>글자 설정</h2><button onClick={() => setStyleOpen(false)}>닫기</button></div>
+      <StyleRange label="글자 크기" value={style.fontSize} min={12} max={40} step={1} unit="px" onChange={(value) => changeStyle({ ...style, fontSize: value })} />
+      <StyleRange label="줄간격" value={style.lineHeight} min={1} max={3} step={0.05} digits={2} onChange={(value) => changeStyle({ ...style, lineHeight: value })} />
+      <StyleRange label="문단 간격" value={style.paragraphSpacing} min={0} max={3} step={0.1} digits={1} unit="em" onChange={(value) => changeStyle({ ...style, paragraphSpacing: value })} />
+      <StyleRange label="들여쓰기" value={style.indent} min={0} max={3} step={0.1} digits={1} unit="em" emptyLabel="책 기본" onChange={(value) => changeStyle({ ...style, indent: value })} onClear={() => changeStyle({ ...style, indent: undefined })} />
+      <StyleRange label="좌우 여백" value={style.margin} min={0} max={80} step={2} unit="px" onChange={(value) => changeStyle({ ...style, margin: value })} />
+      <fieldset className="style-choice"><legend>글자 굵기</legend><div>{([{ value: 400, label: '보통' }, { value: 500, label: '조금 굵게' }, { value: 600, label: '굵게' }, { value: 700, label: '아주 굵게' }] as const).map((item) => <button key={item.value} className={style.fontWeight === item.value ? 'active' : ''} onClick={() => changeStyle({ ...style, fontWeight: item.value })}>{item.label}</button>)}</div></fieldset>
+      <label>글꼴<select value={style.fontFamily} onChange={(event) => changeStyle({ ...style, fontFamily: event.target.value as ReaderStyle['fontFamily'] })}><option value="book">책 기본</option><option value="serif">명조</option><option value="sans">고딕</option></select></label>
+      <button onClick={() => changeStyle(defaultReaderStyle(displayMode))}>기본값으로</button>
     </aside>}
     {selection && !selectionMode && <div className="selection-actions" style={{ top: selection.top } as CSSProperties}>
       <button onClick={() => setSelectionMode('quote')}>필사함에 담기</button>
@@ -397,6 +402,16 @@ export function ReaderView({ book, epubFile, timer, initialCfi, onExit, onChange
       <div><button onClick={() => setSelectionMode(undefined)}>취소</button><button className="primary" onClick={() => void saveSelection()}>저장</button></div>
     </div>}
   </div>;
+}
+
+function StyleRange({ label, value, min, max, step, unit = '', digits = 0, emptyLabel, onChange, onClear }: {
+  label: string; value?: number; min: number; max: number; step: number; unit?: string; digits?: number; emptyLabel?: string;
+  onChange: (value: number) => void; onClear?: () => void;
+}) {
+  const shown = value === undefined ? emptyLabel ?? '' : `${value.toFixed(digits)}${unit}`;
+  const numeric = value ?? min;
+  const adjust = (direction: -1 | 1) => onChange(Number(Math.max(min, Math.min(max, Math.round((numeric + direction * step) / step) * step)).toFixed(digits)));
+  return <div className="style-range"><div className="style-range-title"><strong>{label}</strong><output>{shown}</output></div><div className="style-range-controls"><button onClick={() => adjust(-1)} aria-label={`${label} 줄이기`}>−</button><input aria-label={label} type="range" min={min} max={max} step={step} value={numeric} onChange={(event) => onChange(Number(event.target.value))} /><button onClick={() => adjust(1)} aria-label={`${label} 늘리기`}>＋</button></div>{onClear && <button className="style-book-default" onClick={onClear}>책 기본</button>}</div>;
 }
 
 function TocList({ items, onMove }: { items: FoliateTocItem[]; onMove: (href: string) => void }) {
