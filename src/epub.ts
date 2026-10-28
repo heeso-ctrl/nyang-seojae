@@ -83,19 +83,25 @@ export function readerCss(style: ReaderStyle, mode: DisplayMode): string {
     : style.fontFamily === 'sans' ? 'Arial, "Noto Sans CJK KR", sans-serif' : 'inherit';
   const foreground = mode === 'eink' ? '#000000' : '#221f1c';
   const background = mode === 'eink' ? '#ffffff' : '#fffdf6';
-  const paragraphBlocks = 'p, li, blockquote, div:not(:has(div, p))';
+  const paragraphBlocks = ':where(p, li, blockquote, dd, div:not(:has(div, p))):not(h1 *, h2 *, h3 *, h4 *, h5 *, h6 *)';
   const indentRule = style.indent === undefined ? '' : `\n    ${paragraphBlocks} { text-indent: ${style.indent}em !important; }`;
   return `
     html, body { color: ${foreground} !important; background: ${background} !important; }
-    body { font-family: ${family} !important; }
-    body, p, div, li, blockquote, dd, span {
-      color: ${foreground} !important;
-      font-size: ${style.fontSize}px !important;
+    html { font-size: ${style.fontSize}px !important; }
+    body {
+      font-size: 1rem !important;
+      font-family: ${family} !important;
       line-height: ${style.lineHeight} !important;
-      font-weight: ${style.fontWeight} !important;
       -webkit-text-stroke: ${textStrokeFor(style.fontWeight)}px !important;
     }
-    ${paragraphBlocks} { margin-bottom: ${style.paragraphSpacing}em !important; }${indentRule}
+    body, p, div, li, blockquote, dd, span, h1, h2, h3, h4, h5, h6 {
+      color: ${foreground} !important;
+    }
+    ${paragraphBlocks} {
+      line-height: ${style.lineHeight} !important;
+      margin-top: 0 !important;
+      margin-bottom: ${style.paragraphSpacing}em !important;
+    }${indentRule}
     script { display: none !important; }
   `;
 }

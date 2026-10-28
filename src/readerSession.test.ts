@@ -41,14 +41,21 @@ describe('뷰어 자동 독서 시간', () => {
   });
 
   it('직접 타이머는 2시간 이상 가려졌을 때만 확인한다', () => {
-    expect(shouldAskAfterHidden(0, 30 * 60_000)).toBe(false);
-    expect(shouldAskAfterHidden(0, 2 * 60 * 60_000)).toBe(true);
-    expect(shouldAskAfterHidden(0, 130 * 60_000)).toBe(true);
+    expect(shouldAskAfterHidden(clock().timer, 0, 30 * 60_000)).toBe(false);
+    expect(shouldAskAfterHidden(clock().timer, 0, 2 * 60 * 60_000)).toBe(true);
+    expect(shouldAskAfterHidden(clock().timer, 0, 130 * 60_000)).toBe(true);
   });
 
-  it('60초 미만 세션은 버린다', () => {
-    expect(finishReaderClock(clock(), 59_999).keep).toBe(false);
-    expect(finishReaderClock(clock(), 60_000)).toMatchObject({ keep: true, activeSec: 60 });
+  it('사용자 일시정지 중인 직접 타이머는 2시간 확인 대상이 아니다', () => {
+    const paused = { ...clock().timer, mode: 'timer' as const, pauses: [{ at: 10_000, reason: 'user' as const }] };
+    expect(shouldAskAfterHidden(paused, 0, 130 * 60_000)).toBe(false);
+  });
+
+  it('60초 미만은 reader-auto만 버리고 직접 타이머는 저장한다', () => {
+    expect(finishReaderClock(clock(), 30_000)).toMatchObject({ keep: true, activeSec: 30 });
+    expect(finishReaderClock({ ...clock(), timer: { ...clock().timer, mode: 'timer' } }, 30_000).keep).toBe(true);
+    expect(finishReaderClock({ ...clock(), timer: { ...clock().timer, mode: 'reader-auto' } }, 30_000).keep).toBe(false);
+    expect(finishReaderClock({ ...clock(), timer: { ...clock().timer, mode: 'reader-auto' } }, 60_000)).toMatchObject({ keep: true, activeSec: 60 });
   });
 
   it('뷰어 밖 시간은 빼고 두 독서 구간의 활성 시간만 합친다', () => {

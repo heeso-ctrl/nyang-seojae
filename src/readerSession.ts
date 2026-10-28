@@ -64,12 +64,14 @@ export function homeTimerPose(timer: ActiveTimer): 'reading' | 'resting' {
   return 'resting';
 }
 
-export function shouldAskAfterHidden(hiddenAt: number, visibleAt: number): boolean {
-  return visibleAt - hiddenAt >= 2 * 60 * 60_000;
+export function shouldAskAfterHidden(timer: ActiveTimer, hiddenAt: number, visibleAt: number): boolean {
+  return timer.mode !== 'reader-auto'
+    && openPause(timer)?.reason !== 'user'
+    && visibleAt - hiddenAt >= 2 * 60 * 60_000;
 }
 
 export function finishReaderClock(clock: ReaderClock, endedAt: number): { activeSec: number; pauses: ActiveTimer['pauses']; keep: boolean } {
   const pauses = clock.timer.pauses.map((pause) => pause.until === undefined ? { ...pause, until: endedAt } : pause);
   const activeSec = activeSeconds({ ...clock.timer, pauses }, endedAt);
-  return { activeSec, pauses, keep: activeSec >= 60 };
+  return { activeSec, pauses, keep: clock.timer.mode !== 'reader-auto' || activeSec >= 60 };
 }

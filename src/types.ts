@@ -88,7 +88,7 @@ export interface Wallet { id: 'me'; coins: number }
 export interface OwnedItem { itemId: string; acquiredAt: number }
 export interface Equipped { id: 'me'; theme: string; set: string; fur?: string; hat?: string; outfit?: string }
 export interface CoinLog { id: string; amount: number; reason: string; at: number }
-export interface ActiveTimer { id: 'current'; bookId: string; startedAt: number; pauses: Pause[]; mode?: 'timer' | 'reader-auto' }
+export interface ActiveTimer { id: 'current'; bookId: string; startedAt: number; pauses: Pause[]; mode?: 'timer' | 'reader-auto'; progressFrom?: number }
 export interface Preference { key: string; value: unknown }
 
 export interface ReaderKeys {
